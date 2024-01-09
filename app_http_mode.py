@@ -9,8 +9,6 @@ from dotenv import load_dotenv
 # Load environment variables from .env file or Lambda environment
 load_dotenv()
 
-# chat: https://chat.openai.com/c/a08082f0-aacc-44a1-b933-438578253d5a
-
 client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
 
 

@@ -6,8 +6,6 @@ from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_sdk import WebClient, WebhookClient
 
 
-# chat: https://chat.openai.com/c/a08082f0-aacc-44a1-b933-438578253d5a
-
 client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
 
 
