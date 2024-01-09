@@ -1,0 +1,8 @@
+.venv/*
+.vscode/*
+.env
+.env.dev
+.DS_Store
+__pycache__
+test.py
+.aws*

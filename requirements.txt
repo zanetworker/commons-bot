@@ -1,0 +1,7 @@
+slack_bolt==1.10.0
+python-dotenv==0.19.2
+slack_sdk==3.10.0
+Flask==2.0.1
+SQLAlchemy==1.4.27
+Werkzeug==2.0.1
+aws-wsgi==0.2.7
