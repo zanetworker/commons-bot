@@ -22,11 +22,49 @@ slack_app = App(
 flask_app = Flask(__name__)
 handler = SlackRequestHandler(slack_app)
 
+
+# Customize this list based on the roles and interests in your organization
+roles_and_interests = [
+    "Software Engineer",
+    "Product Manager",
+    "Data Scientist",
+    "Solution Architect",
+    "Operations",
+    "Security Specialist",
+    "Educator",
+]
+
+blocks = [
+    {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": "Welcome to OpenShift Commons! To get started, tell us about your role or interests:",
+        }
+    },
+    {
+        "type": "actions",
+        "elements": [
+            {
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": role,
+                },
+                "action_id": f"select_{role.lower().replace(' ', '_')}",
+            }
+            for role in roles_and_interests
+        ]
+    },
+]
+
 # Event, command, and action handlers
 @slack_app.event("team_join")
 def handle_member_joined_channel(event, client):
-    # Your existing code for handling team_join event
-    pass 
+    user_id = event['user']['id']
+    channel_id = user_id  # Direct message channel ID is the same as the user's ID
+    client.chat_postMessage(channel=channel_id, blocks=blocks, text=f"Welcome <@{user_id}>")
+ 
 
 @slack_app.event("message")
 def handle_message_events(body, logger):
@@ -38,41 +76,6 @@ def handle_onboard_command(ack, body, say):
     ack()
     user_id = body["user_id"]
     channel_id = body["channel_id"]
-
-    # Customize this list based on the roles and interests in your organization
-    roles_and_interests = [
-        "Software Engineer",
-        "Product Manager",
-        "Data Scientist",
-        "Solution Architect",
-        "Operations",
-        "Security Specialist",
-        "Educator",
-    ]
-
-    blocks = [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": "Welcome to OpenShift Commons! To get started, tell us about your role or interests:",
-            }
-        },
-        {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": role,
-                    },
-                    "action_id": f"select_{role.lower().replace(' ', '_')}",
-                }
-                for role in roles_and_interests
-            ]
-        },
-    ]
 
     say(blocks=blocks, text=f"Welcome <@{user_id}>", channel=channel_id)
 

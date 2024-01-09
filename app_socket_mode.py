@@ -13,15 +13,6 @@ app = App(
     signing_secret=os.environ["SLACK_SIGNING_SECRET"]
 )
 
-# print envs 
-
-print("Environment variables:")
-print(os.environ["SLACK_BOT_TOKEN"])
-print(os.environ["SLACK_SIGNING_SECRET"])
-print(os.environ["SLACK_APP_TOKEN"])
-
-
-
 @app.event("team_join")
 def handle_member_joined_channel(event, client):
     user_id = event['user']
