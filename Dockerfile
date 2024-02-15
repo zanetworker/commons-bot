@@ -14,6 +14,10 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi
 
+RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
+# Verify the SQLite version
+RUN sqlite3 --version
+
 # Copy the content of the local src directory to the working directory
 COPY . .
 
