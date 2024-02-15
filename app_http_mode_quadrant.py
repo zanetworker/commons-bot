@@ -43,7 +43,7 @@ def get_qdrant_client():
 def load_youtube_links():
     PandasExcelReader = download_loader("PandasExcelReader")
     loader = PandasExcelReader(pandas_config={"header": 0})
-    return loader.load_data(file=Path('./data/commons_videos.xlsx'))
+    return loader.load_data(file=Path('./data/commons_urls.xlsx'))
 
 def load_youtube_transcripts():
     loader = YoutubeTranscriptReader()
