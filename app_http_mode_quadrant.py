@@ -15,7 +15,6 @@ from slack_sdk import WebClient, WebhookClient
 
 
 # import qdrant_client
-import chromadb
 import qdrant_client 
 
 # import qdrant_client
