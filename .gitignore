@@ -6,3 +6,10 @@
 __pycache__
 test.py
 .aws*
+*.csv
+*.json
+qdrant_data
+chroma_db
+data/*
+additional_scripts
+venv

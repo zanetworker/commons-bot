@@ -1,0 +1,7 @@
+version: 2
+authtoken: 5JySYsMMQLnE5EPYcWomP_3UHTk9bsbCYNhaBgDKkyY
+tunnels:
+  default:
+    addr: 5002
+    proto: http
+    domain: wasp-valued-instantly.ngrok-free.app

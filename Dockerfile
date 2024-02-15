@@ -1,14 +1,18 @@
 # Use an official Python runtime as a parent image
-FROM python:3.8.13-slim-bullseye
+FROM python:3.11-slim-bullseye
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the dependencies file to the working directory
-COPY requirements.txt .
+# Install Poetry
+RUN pip install --no-cache-dir poetry
 
-# Install any dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy the pyproject.toml and optionally poetry.lock file to the working directory
+COPY pyproject.toml poetry.lock* ./
+
+# Install dependencies using Poetry in a way that doesn't create a virtual environment
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi
 
 # Copy the content of the local src directory to the working directory
 COPY . .
