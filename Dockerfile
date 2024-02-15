@@ -14,7 +14,24 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi
 
-RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
+# RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
+# # Verify the SQLite version
+# RUN sqlite3 --version
+
+# Install build dependencies for SQLite
+RUN apt-get update && apt-get install -y wget gcc make
+
+# Download and compile SQLite from source to ensure we have the desired version
+ENV SQLITE_VERSION=3360000
+RUN wget https://www.sqlite.org/2021/sqlite-autoconf-${SQLITE_VERSION}.tar.gz \
+    && tar xzf sqlite-autoconf-${SQLITE_VERSION}.tar.gz \
+    && cd sqlite-autoconf-${SQLITE_VERSION} \
+    && ./configure --prefix=/usr \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf sqlite-autoconf-${SQLITE_VERSION} sqlite-autoconf-${SQLITE_VERSION}.tar.gz
+
 # Verify the SQLite version
 RUN sqlite3 --version
 
