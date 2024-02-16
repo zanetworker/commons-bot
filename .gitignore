@@ -10,6 +10,6 @@ test.py
 *.json
 qdrant_data
 chroma_db
-data/*
+# data/*
 additional_scripts
 venv

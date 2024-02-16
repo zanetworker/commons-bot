@@ -6,18 +6,14 @@ import sys
 import datetime, uuid
 from pathlib import Path
 
-
+import weaviate
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_sdk import WebClient, WebhookClient
 
-
-# import qdrant_client
-import chromadb
-
-from llama_index.vector_stores import ChromaVectorStore
+from llama_index.vector_stores import WeaviateVectorStore
 from llama_index.schema import TextNode
 from llama_index.prompts import PromptTemplate
 # from llama_index.postprocessor import FixedRecencyPostprocessor
@@ -35,10 +31,8 @@ load_dotenv()
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
-# initialize index
-def get_chroma_database_collection():
-    return chromadb.PersistentClient(path="./chroma_db").get_or_create_collection("commons")
 
+# initialize index
 def load_youtube_links():
     PandasExcelReader = download_loader("PandasExcelReader")
     loader = PandasExcelReader(pandas_config={"header": 0})
@@ -82,30 +76,43 @@ def load_youtube_transcripts():
 ]
     return loader.load_data(ytlinks=ytlinks)
 
-def create_or_load_index(documents, vector_store = "./chroma_db", chunk_size=1000, db=False):
-    vector_store_exists = os.path.exists(vector_store)
-    index = None
-    llm = OpenAI(model="gpt-4", temperature=0.0)
-    service_context = ServiceContext.from_defaults(llm=llm, chunk_size=chunk_size)
 
-    vector_store = ChromaVectorStore(chroma_collection=get_chroma_database_collection())
+def create_or_load_index(documents, vector_store, llm, client,  chunk_size=1000):
+    index = None
+    service_context = ServiceContext.from_defaults(llm=llm, chunk_size=chunk_size)
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
-    if vector_store_exists: 
+    questions = client.schema.exists("CommonsUrls")
+    vector_story_exists = False
+
+    if vector_story_exists: 
+        print("Vector store exists")
         index = VectorStoreIndex.from_vector_store(vector_store, storage_context=storage_context, service_context=service_context)
     else:
+        print("Vector store does not exist")
         index = VectorStoreIndex.from_documents(documents, storage_context=storage_context, service_context=service_context)
 
     return index
 
-def create_query_engine(index, similarity_top_k=2, streaming=True, chat=False):
+def create_query_engine(index, similarity_top_k=2, streaming=False, chat=False):
     return index.as_chat_engine(streaming=streaming) if chat else index.as_query_engine(similarity_top_k=similarity_top_k, streaming=streaming)
 
 youtube_video_links = load_youtube_links()
 youtube_transcripts = load_youtube_transcripts()
 
-index = create_or_load_index(youtube_video_links)
-index_transcripts = create_or_load_index(youtube_transcripts)
+auth_config = weaviate.AuthApiKey(api_key=os.environ["WCS_API_KEY"])
+
+client = weaviate.Client(
+    url="https://commons-gzovoib2.weaviate.network",
+    auth_client_secret=auth_config,
+    additional_headers={ 'X-OpenAI-Api-Key': os.environ["OPENAI_API_KEY"]}
+)
+
+vector_store = WeaviateVectorStore(weaviate_client = client, class_prefix="CommonsUrls", index_name="CommonsUrls", text_key="content")
+llm = OpenAI(model="gpt-4", temperature=0.0)
+
+index = create_or_load_index(documents=youtube_video_links, vector_store=vector_store, llm=llm, client=client, chunk_size=1000)
+index_transcripts = create_or_load_index(documents=youtube_video_links, vector_store=vector_store, llm=llm, client=client, chunk_size=1000)
 
 query_engine_links = create_query_engine(index, chat=False)
 query_engine_transcripts = create_query_engine(index_transcripts, chat=False)
@@ -117,7 +124,7 @@ template = (
     "{context_str}"
     "\n---------------------\n"
     "You are a helpful AI assistant who can tell me which video is best matching to my query. \n"
-    "give me the most relevant video from the context I gave you: {query_str}\n"
+    "give me the most relevant video url from the context: {query_str}\n"
 )
 
 template_transcripts = (
@@ -146,6 +153,7 @@ slack_app = App(
     token=os.environ["SLACK_BOT_TOKEN"],
     signing_secret=os.environ["SLACK_SIGNING_SECRET"]
 )
+
 
 # Flask app to handle requests
 flask_app = Flask(__name__)
@@ -418,4 +426,4 @@ def send_response_to_slack(response_url, message):
 
 
 if __name__ == "__main__":
-    flask_app.run(debug=True, port=5002)
+    flask_app.run(debug=True, port=10000)

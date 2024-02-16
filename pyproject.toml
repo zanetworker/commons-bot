@@ -17,6 +17,7 @@ chromadb = "^0.4.22"
 llama-hub = "^0.0.79.post1"
 openpyxl = "^3.1.2"
 youtube-transcript-api = "^0.6.2"
+weaviate-client = "^4.4.4"
 
 
 [build-system]
