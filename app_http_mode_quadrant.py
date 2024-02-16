@@ -40,6 +40,12 @@ logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 def get_qdrant_client():
     return qdrant_client.QdrantClient(path="./qdrant_data")
 
+def get_qdrant_cloud_client():
+    return  qdrant_client.QdrantClient(
+    url="https://42bbc9fd-ac0c-4cea-9dd3-febccefd882b.us-east4-0.gcp.cloud.qdrant.io:6333", 
+    api_key=os.environ["QD_API_KEY"],
+)
+
 def load_youtube_links():
     PandasExcelReader = download_loader("PandasExcelReader")
     loader = PandasExcelReader(pandas_config={"header": 0})
@@ -83,31 +89,41 @@ def load_youtube_transcripts():
 ]
     return loader.load_data(ytlinks=ytlinks)
 
-def create_or_load_index(documents, vector_store_path = "./qdrant_data", chunk_size=1000, db=False):
-    vector_store_exists = os.path.exists(vector_store_path)
-    index = None
-    llm = OpenAI(model="gpt-4", temperature=0.0)
-    service_context = ServiceContext.from_defaults(llm=llm, chunk_size=chunk_size)
+def load_index(vector_store, storage_context, service_context):
+    return VectorStoreIndex.from_vector_store(vector_store, storage_context=storage_context, service_context=service_context)
 
-    client = qdrant_client.QdrantClient(path="./qdrant_data")
-    vector_store = QdrantVectorStore(client=client, collection_name="text_docs", service_context=service_context)
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+def create_index(documents, storage_context, service_context):
+    return VectorStoreIndex.from_documents(documents, storage_context=storage_context, service_context=service_context)
 
-    if vector_store_exists: 
-        index = VectorStoreIndex.from_vector_store(vector_store, storage_context=storage_context, service_context=service_context)
-    else:
-        index = VectorStoreIndex.from_documents(documents, storage_context=storage_context, service_context=service_context)
-
-    return index
 
 def create_query_engine(index, similarity_top_k=2, streaming=True, chat=False):
     return index.as_chat_engine(streaming=streaming) if chat else index.as_query_engine(similarity_top_k=similarity_top_k, streaming=streaming)
 
-youtube_video_links = load_youtube_links()
-youtube_transcripts = load_youtube_transcripts()
 
-index = create_or_load_index(youtube_video_links)
-index_transcripts = create_or_load_index(youtube_transcripts)
+
+llm = OpenAI(model="gpt-4", temperature=0.0)
+service_context = ServiceContext.from_defaults(llm=llm, chunk_size=1000)
+
+collection = "commons"
+client = get_qdrant_cloud_client()
+vector_store = QdrantVectorStore(client=client, collection_name=collection, service_context=service_context)
+storage_context = StorageContext.from_defaults(vector_store=vector_store)
+
+collection_exists = client.get_collection(collection_name=collection)
+
+index = None
+index_transcripts = None
+
+if not collection_exists:
+    print("Collection does not exist, creating new index")
+    youtube_video_links = load_youtube_links()
+    youtube_transcripts = load_youtube_transcripts()
+    index = create_index(youtube_video_links, storage_context=storage_context, service_context=service_context)
+    index_transcripts = create_index(youtube_transcripts)
+else:
+    print("Collection does exist, loading index from storage")
+    index = load_index(vector_store=vector_store, storage_context=storage_context, service_context=service_context)
+    index_transcripts = index # use the same index for both links and transcripts
 
 query_engine_links = create_query_engine(index, chat=False)
 query_engine_transcripts = create_query_engine(index_transcripts, chat=False)
@@ -420,4 +436,5 @@ def send_response_to_slack(response_url, message):
 
 
 if __name__ == "__main__":
-    flask_app.run(debug=True, port=5002)
+    port = os.getenv("PORT", 10000)
+    flask_app.run(host='0.0.0.0', debug=True, port=port)
