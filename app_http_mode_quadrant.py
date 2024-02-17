@@ -5,6 +5,7 @@ import re
 import sys
 import datetime, uuid
 from pathlib import Path
+import nest_asyncio
 
 
 from dotenv import load_dotenv
@@ -21,6 +22,10 @@ import qdrant_client
 from llama_index.vector_stores import QdrantVectorStore
 from llama_index.schema import TextNode
 from llama_index.prompts import PromptTemplate
+from llama_index.tools import QueryEngineTool, ToolMetadata
+from llama_index.agent import ReActAgent
+
+
 # from llama_index.postprocessor import FixedRecencyPostprocessor
 from llama_index import download_loader
 from llama_hub.youtube_transcript import YoutubeTranscriptReader
@@ -31,6 +36,7 @@ from llama_index.llms import OpenAI
 
 # Load environment variables from .env file or Lambda environment
 load_dotenv()
+nest_asyncio.apply()
 
 # even noisier debugging
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -97,11 +103,13 @@ def create_index(documents, storage_context, service_context):
 
 
 def create_query_engine(index, similarity_top_k=2, streaming=True, chat=False):
-    return index.as_chat_engine(streaming=streaming) if chat else index.as_query_engine(similarity_top_k=similarity_top_k, streaming=streaming)
+    return index.as_chat_engine(streaming=streaming, similarity_top_k=similarity_top_k) if chat else index.as_query_engine(similarity_top_k=similarity_top_k, streaming=streaming)
 
 
 
-llm = OpenAI(model="gpt-4", temperature=0.0)
+llm = OpenAI(model="gpt-4", temperature=0.0, stop=["\n", "Here is the URL of the video you might like:"])
+# llm = OpenAI(model="gpt-3.5-turbo-0613", temperature=0.0, max_tokens=100, top_p=1.0, frequency_penalty=0.0, presence_penalty=0.0, stop=["\n", "Here is the URL of the video you might like:"])
+
 service_context = ServiceContext.from_defaults(llm=llm, chunk_size=1000)
 
 collection = "commons"
@@ -135,8 +143,19 @@ template = (
     "{context_str}"
     "\n---------------------\n"
     "You are a helpful AI assistant who can tell me which video is best matching to my query. \n"
-    "give me the most relevant video from the context I gave you: {query_str}\n"
+    "give me the most relevant video URL from the context I gave you: {query_str}\n"
 )
+
+# You are a stock market sorcerer who is an expert on the companies Lyft and Uber.\
+#     You will answer questions about Uber and Lyft as in the persona of a sorcerer \
+#     and veteran stock market investor.
+# ""
+context = """
+You are a youtube link sorcerer who is an expert OpenShift commons.\
+You will answer questions about OpenShift and cloud-native topics in the persona of a sorcerer \
+You will give links from the context and corpus you were provided \
+if you don't find a link, provide a link to a video that you think is relevant to the query. \
+"""
 
 template_transcripts = (
     "Your context is a list of youtube transcripts. Each transcript is for a video that talks about a certain topic \n"
@@ -157,6 +176,25 @@ query_engine_links.update_prompts(
 query_engine_transcripts.update_prompts(
         {"response_synthesizer:text_qa_template": qa_template_transcripts}
 )
+
+query_engine_tools = [
+    QueryEngineTool(
+        query_engine=query_engine_links,
+        metadata=ToolMetadata(
+            name="youtube_links",
+            description="Links for OpenShift commons videos. Each input has a url, and a title for the video indicating what the video was about.",
+        ),
+    ),
+    QueryEngineTool(
+        query_engine=query_engine_transcripts,
+        metadata=ToolMetadata(
+            name="youtube_transcripts",
+            description="Transcripts for OpenShift commons videos. Each transcript is for a video that talks about a certain topic.",
+        ),
+    ),
+]
+
+
 
 client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
 # Initializes your app with your bot token and signing secret
@@ -211,14 +249,18 @@ blocks = [
         ]
     },
 ]
-
+   
 @slack_app.message()
-def reply(message, say):
+def reply(message, say, client):
+    user_id = message['user']  # Extract the user ID from the message
+    channel_id = message['channel']  # Extract the channel ID from the message
     blocks = message.get('blocks')
     print(blocks)
+
     if blocks:
         for block in blocks:
             if block.get('type') != 'rich_text':
+                print("TYPE IS:" + block.get('type'))
                 continue
             for rich_text_section in block.get('elements', []):
                 elements = rich_text_section.get('elements', [])
@@ -227,34 +269,40 @@ def reply(message, say):
                         if element.get('type') == 'text':
                             query = element.get('text')
                             print(f"Somebody asked the bot: {query}")
+                            # commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=context)
+                            # # response = commons_agent.chat(query)
                             response_1 = query_engine_links.query(query)
                             response_2 = query_engine_transcripts.query(query)
-                            # formulate a repsonse the joins response_1 and response_2 nicely without using "+" operator
-                            response = str(response_1) + "\n\n" + str(response_2)
-                            print("Context was:")
-                            print(response_1.source_nodes)
-                            print(response_2.source_nodes)
+                            response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
+                            # print("Context was:")
+                            # print(response_1.source_nodes)
+                            # print(response_2.source_nodes)
 
                             print(f"Response was: {response}")
-                            say(response)
+
+                            # Use chat_postEphemeral to send a reply only visible to the user
+                            client.chat_postEphemeral(
+                                channel=channel_id,
+                                user=user_id,
+                                text=response  # Send the response text
+                            )
                             return
-   
-   
-    dt_object = datetime.datetime.fromtimestamp(float(message.get('ts')))
-    formatted_time = dt_object.strftime('%Y-%m-%d %H:%M:%S')
-    # otherwise do something else with it
-    print("Saw a fact: ", message.get('text'))
-        # get the message text
-    text = message.get('text')
-        # create a node with metadata
-    node = TextNode(
-        text=text,
-        id_=str(uuid.uuid4()),
-        metadata={
-            "when": formatted_time
-        }
-    )
-    index.insert_nodes([node])
+
+    # dt_object = datetime.datetime.fromtimestamp(float(message.get('ts')))
+    # formatted_time = dt_object.strftime('%Y-%m-%d %H:%M:%S')
+    # # otherwise do something else with it
+    # print("Saw a fact: ", message.get('text'))
+    #     # get the message text
+    # text = message.get('text')
+    #     # create a node with metadata
+    # node = TextNode(
+    #     text=text,
+    #     id_=str(uuid.uuid4()),
+    #     metadata={
+    #         "when": formatted_time
+    #     }
+    # )
+    # index.insert_nodes([node])
 
 
 # Event, command, and action handlers
@@ -265,79 +313,24 @@ def handle_member_joined_channel(event, client):
     client.chat_postMessage(channel=channel_id, blocks=blocks, text=f"Welcome <@{user_id}>")
  
 
-@slack_app.event("message")
-def handle_message_events(body, logger):
-    logger.info(body)
-    logger.info("We are handling a message")
+# @slack_app.event("message")
+# def handle_message_events(body, logger):
+#     logger.info(body)
+#     logger.info("We are handling a message")
 
-# Handling '/onboard' command
 @slack_app.command("/onboard")
-def handle_onboard_command(ack, body, say):
+def handle_onboard_command(ack, body, client):
     ack()
     user_id = body["user_id"]
     channel_id = body["channel_id"]
 
-    say(blocks=blocks, text=f"Welcome <@{user_id}>", channel=channel_id)
-
-# Handling role selection action
-@slack_app.action(re.compile("select_(.*)"))
-def handle_role_selection(ack, body, say):
-    ack()
-    action_id = body['actions'][0]['action_id']
-    role = action_id.split('select_')[1].replace('_', ' ').title()  # Capitalize the role
-
-    user_id = body["user"]["id"]
-
-    channel_suggestions = {
-    "software engineer": [
-        {"name": "bigdata_sig", "id": "C338UGHG8"},
-        {"name": "imagebuilder_sig", "id": "C338V74DN"},
-        {"name": "dotnet_sig", "id": "C343FF8SH"},
-        {"name": "devops_sig", "id": "C34333SCC"},
-        {"name": "openstack_sig", "id": "C34L30NK0"},
-    ],
-    "product manager": [
-        {"name": "event", "id": "C0FNZ57NJ"},
-        {"name": "marketing", "id": "CXXXXXXX1"},
-        {"name": "product", "id": "CXXXXXXX2"},
-    ],
-    "data scientist": [
-        {"name": "bigdata_sig", "id": "C338UGHG8"},
-        {"name": "data_and_ai_sig", "id": "C8L8S4XFF"},
-        {"name": "datascience-gathering-2021", "id": "C01L2ET3H50"},
-    ],
-    "solution architect": [
-        {"name": "cloud-paks", "id": "C02E27BJD98"},
-        {"name": "openstack_sig", "id": "C34L30NK0"},
-        {"name": "operator-framework", "id": "CBA2X443E"},
-    ],
-    "operations": [
-        {"name": "operations_sig", "id": "C34333SCC"},
-        {"name": "operations-_sig", "id": "C343D9BBP"},
-        {"name": "aws", "id": "CCL8BMY7J"},
-    ],
-    "security specialist": [
-        {"name": "security_sig", "id": "C340W5L2E"},
-        {"name": "gov_sig", "id": "C3409GB1Q"},
-    ],
-    "educator": [
-        {"name": "edu_sig", "id": "C34LFK1K9"},
-        {"name": "meetup-organizers", "id": "C015THC4KMW"},
-    ],
-}
-    
-    channel_names_id = channel_suggestions.get(role.lower(), [])
-
-    suggested_channels = [{"name": name_id['name'], "id": name_id['id']} for name_id in channel_names_id]
-    suggested_channels = [channel for channel in suggested_channels if channel['id'] is not None]
-
-    suggested_channels_text = "\n".join([f"- <#{channel['id']}|{channel['name']}>" for channel in suggested_channels])
-
-    say(
-        text=f"<@{user_id}> based on your interest in {role}, we suggest you join the following channels:\n{suggested_channels_text}"
+    # Use chat_postEphemeral to send a message only visible to the user
+    client.chat_postEphemeral(
+        channel=channel_id,
+        user=user_id,
+        blocks=blocks,
+        text=f"Welcome <@{user_id}>"
     )
-
-
 
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
@@ -364,6 +357,8 @@ def slack_interactive():
     action_id = payload["actions"][0]["action_id"]
     user_id = payload["user"]["id"]
     response_url = payload["response_url"]
+    channel_id = payload['channel']['id']  # Ensure this is correctly extracted
+
 
     # Parse the role from the action_id
     role = action_id.split('select_')[1].replace('_', ' ').title()
@@ -406,18 +401,24 @@ def slack_interactive():
     ],
 }
 
-    # Find the suggested channels for the role
     channel_names_id = channel_suggestions.get(role.lower(), [])
     suggested_channels = [{"name": name_id['name'], "id": name_id['id']} for name_id in channel_names_id]
     suggested_channels = [channel for channel in suggested_channels if channel['id'] is not None]
     suggested_channels_text = "\n".join([f"- <#{channel['id']}|{channel['name']}>" for channel in suggested_channels])
+    kubecon_paris = {"name": "kubecon_paris", "id": "C06HFFNHVPA"}
 
     # Prepare the response message
-    message = {
-        "text": f"<@{user_id}> based on your interest in {role}, we suggest you join the following channels:\n{suggested_channels_text}"
-    }
+    response_text = f"<@{user_id}> based on your interest in {role}, we suggest you join the following channels:\n{suggested_channels_text}"
+    response_text += f"\n- <#{kubecon_paris['id']}|{kubecon_paris['name']}> (also check out KubeCon Paris Channel)"
 
-    send_response_to_slack(response_url=response_url, message=message)
+    # Use chat_postEphemeral to send a reply only visible to the user
+    client.chat_postEphemeral(
+        channel=channel_id,
+        user=user_id,
+        text=response_text  # Pass the response_text string here
+    )
+
+    # send_response_to_slack(response_url=response_url, message=message)
     return jsonify({})
 
 @flask_app.route('/hello', methods=['GET'])
