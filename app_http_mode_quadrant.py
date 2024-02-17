@@ -332,6 +332,34 @@ def handle_onboard_command(ack, body, client):
         text=f"Welcome <@{user_id}>"
     )
 
+@slack_app.command("/help")
+def handle_help_command(ack, body, client):
+    ack()  # Acknowledge the command request
+
+    user_id = body["user_id"]
+    channel_id = body["channel_id"]
+
+    # Define the help message with an additional section for asking questions
+    help_message = """
+*Here are the commands you can use with this Slack bot:*
+
+- `/onboard`: Get started with the bot and set up your profile.
+- `/help`: Show this help message.
+
+*Interactions:*
+- Select your role from the buttons provided to get personalized channel recommendations.
+- To ask questions and receive video recommendations, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" The bot will then search through OpenShift Commons videos and transcripts to provide you with relevant video links.
+
+If you have any questions or need further assistance, feel free to ask here!
+    """
+
+    # Use chat_postEphemeral to send the help message only visible to the user who requested it
+    client.chat_postEphemeral(
+        channel=channel_id,
+        user=user_id,
+        text=help_message
+    )
+
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
     data = request.json
@@ -373,8 +401,6 @@ def slack_interactive():
     ],
     "product manager": [
         {"name": "event", "id": "C0FNZ57NJ"},
-        {"name": "marketing", "id": "CXXXXXXX1"},
-        {"name": "product", "id": "CXXXXXXX2"},
     ],
     "data scientist": [
         {"name": "bigdata_sig", "id": "C338UGHG8"},
@@ -420,34 +446,6 @@ def slack_interactive():
 
     # send_response_to_slack(response_url=response_url, message=message)
     return jsonify({})
-
-@slack_app.command("/help")
-def handle_help_command(ack, body, client):
-    ack()  # Acknowledge the command request
-
-    user_id = body["user_id"]
-    channel_id = body["channel_id"]
-
-    # Define the help message with an additional section for asking questions
-    help_message = """
-*Here are the commands you can use with this Slack bot:*
-
-- `/onboard`: Get started with the bot and set up your profile.
-- `/help`: Show this help message.
-
-*Interactions:*
-- Select your role from the buttons provided to get personalized channel recommendations.
-- To ask questions and receive video recommendations, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" The bot will then search through OpenShift Commons videos and transcripts to provide you with relevant video links.
-
-If you have any questions or need further assistance, feel free to ask here!
-    """
-
-    # Use chat_postEphemeral to send the help message only visible to the user who requested it
-    client.chat_postEphemeral(
-        channel=channel_id,
-        user=user_id,
-        text=help_message
-    )
 
 
 def send_response_to_slack(response_url, message):
