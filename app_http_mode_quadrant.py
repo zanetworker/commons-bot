@@ -6,14 +6,13 @@ import sys
 import datetime, uuid
 from pathlib import Path
 import nest_asyncio
-
+from tool_specs import SlackToolSpec
 
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_sdk import WebClient, WebhookClient
-
 
 # import qdrant_client
 import qdrant_client 
@@ -25,14 +24,12 @@ from llama_index.prompts import PromptTemplate
 from llama_index.tools import QueryEngineTool, ToolMetadata
 from llama_index.agent import ReActAgent
 
-
 # from llama_index.postprocessor import FixedRecencyPostprocessor
 from llama_index import download_loader
 from llama_hub.youtube_transcript import YoutubeTranscriptReader
 from llama_index import VectorStoreIndex, Document, StorageContext, ServiceContext
 
 from llama_index.llms import OpenAI
-
 
 # Load environment variables from .env file or Lambda environment
 load_dotenv()
@@ -101,11 +98,26 @@ def load_index(vector_store, storage_context, service_context):
 def create_index(documents, storage_context, service_context):
     return VectorStoreIndex.from_documents(documents, storage_context=storage_context, service_context=service_context)
 
-
 def create_query_engine(index, similarity_top_k=2, streaming=True, chat=False):
     return index.as_chat_engine(streaming=streaming, similarity_top_k=similarity_top_k) if chat else index.as_query_engine(similarity_top_k=similarity_top_k, streaming=streaming)
 
+def format_links_for_slack(text):
+    # Regex pattern to identify URLs
+    url_pattern = r'(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)'
+    formatted_text = re.sub(url_pattern, r'<\1|Link>', text)  # Replace URLs with Slack formatted links
+    return formatted_text
 
+def convert_markdown_links_to_slack(text):
+    # Find all Markdown links in the text
+    markdown_links = re.findall(r'\[([^\]]+)\]\((http[s]?://[^)]+)\)', text)
+
+    # Replace each Markdown link with Slack's link format
+    for link_text, url in markdown_links:
+        slack_link = f"<{url}|{link_text}>"
+        markdown_link = f"[{link_text}]({url})"
+        text = text.replace(markdown_link, slack_link)
+
+    return text
 
 llm = OpenAI(model="gpt-4", temperature=0.0, stop=["\n", "Here is the URL of the video you might like:"])
 # llm = OpenAI(model="gpt-3.5-turbo-0613", temperature=0.0, max_tokens=100, top_p=1.0, frequency_penalty=0.0, presence_penalty=0.0, stop=["\n", "Here is the URL of the video you might like:"])
@@ -152,9 +164,10 @@ template = (
 # ""
 context = """
 You are a youtube link sorcerer who is an expert OpenShift commons.\
-You will answer questions about OpenShift and cloud-native topics in the persona of a sorcerer \
-You will give links from the context and corpus you were provided \
+You will answer questions about OpenShift and cloud-native topics in the perso  na of a sorcerer. \
+You will give links from the context and corpus you were provided, make sure the links are well formatted.\
 if you don't find a link, provide a link to a video that you think is relevant to the query. \
+Also use slack_tools to search for similar questions and provide the best answer. \
 """
 
 template_transcripts = (
@@ -177,7 +190,18 @@ query_engine_transcripts.update_prompts(
         {"response_synthesizer:text_qa_template": qa_template_transcripts}
 )
 
+# Initializes your app with your bot token and signing secret
+slack_app = App(
+    token=os.environ["SLACK_BOT_TOKEN"],
+    signing_secret=os.environ["SLACK_SIGNING_SECRET"]
+)
+
+slack_client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
+slack_tool_spec = SlackToolSpec(client=slack_client)
+slack_tool = slack_tool_spec.to_tool_list()
+
 query_engine_tools = [
+    *slack_tool,
     QueryEngineTool(
         query_engine=query_engine_links,
         metadata=ToolMetadata(
@@ -193,15 +217,6 @@ query_engine_tools = [
         ),
     ),
 ]
-
-
-
-client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
-# Initializes your app with your bot token and signing secret
-slack_app = App(
-    token=os.environ["SLACK_BOT_TOKEN"],
-    signing_secret=os.environ["SLACK_SIGNING_SECRET"]
-)
 
 # Flask app to handle requests
 flask_app = Flask(__name__)
@@ -269,22 +284,32 @@ def reply(message, say, client):
                         if element.get('type') == 'text':
                             query = element.get('text')
                             print(f"Somebody asked the bot: {query}")
-                            # commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=context)
-                            # # response = commons_agent.chat(query)
-                            response_1 = query_engine_links.query(query)
-                            response_2 = query_engine_transcripts.query(query)
-                            response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
-                            # print("Context was:")
-                            # print(response_1.source_nodes)
-                            # print(response_2.source_nodes)
-
-                            print(f"Response was: {response}")
 
                             # Use chat_postEphemeral to send a reply only visible to the user
                             client.chat_postEphemeral(
                                 channel=channel_id,
                                 user=user_id,
-                                text=response  # Send the response text
+                                text="Thinking... :thinking_face:"  # Send the response text
+                            )
+
+                            commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=context)
+                            response = commons_agent.chat(query)
+                            # response_1 = query_engine_links.query(query)
+                            # response_2 = query_engine_transcripts.query(query)
+                            # response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
+                            # print("Context was:")
+                            # print(response_1.source_nodes)
+                            # print(response_2.source_nodes)
+
+                            formatted_response = convert_markdown_links_to_slack(str(response))
+
+                            print(f"Response was: {formatted_response}")
+
+                            # Use chat_postEphemeral to send a reply only visible to the user
+                            client.chat_postEphemeral(
+                                channel=channel_id,
+                                user=user_id,
+                                text=str(formatted_response)  # Send the response text
                             )
                             return
 
