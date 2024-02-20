@@ -462,8 +462,11 @@ def slack_interactive():
     response_text = f"<@{user_id}> based on your interest in {role}, we suggest you join the following channels:\n{suggested_channels_text}"
     response_text += f"\n- <#{kubecon_paris['id']}|{kubecon_paris['name']}> (also check out KubeCon Paris Channel)"
 
+
+    # create slack_client
+    slack_client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
     # Use chat_postEphemeral to send a reply only visible to the user
-    client.chat_postEphemeral(
+    slack_client.chat_postEphemeral(
         channel=channel_id,
         user=user_id,
         text=response_text  # Pass the response_text string here
