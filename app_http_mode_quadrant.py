@@ -265,7 +265,7 @@ blocks = [
     },
 ]
    
-@slack_app.command("commons")
+@slack_app.command("/commons")
 def handle_commons_command(ack, say, command, client):
     # Acknowledge the command request
     ack()
@@ -400,7 +400,7 @@ def handle_onboard_command(ack, body, client):
 
 @slack_app.command("/help")
 def handle_help_command(ack, body, client):
-    ack()  # Acknowledge the command request
+    ack() 
 
     user_id = body["user_id"]
     channel_id = body["channel_id"]
