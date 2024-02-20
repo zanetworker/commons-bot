@@ -119,7 +119,7 @@ def convert_markdown_links_to_slack(text):
 
     return text
 
-llm = OpenAI(model="gpt-4", temperature=0.0, stop=["\n", "Here is the URL of the video you might like:"])
+llm = OpenAI(model="gpt-4-turbo-preview", temperature=0.0, stop=["\n", "Here is the URL of the video you might like:"])
 # llm = OpenAI(model="gpt-3.5-turbo-0613", temperature=0.0, max_tokens=100, top_p=1.0, frequency_penalty=0.0, presence_penalty=0.0, stop=["\n", "Here is the URL of the video you might like:"])
 
 service_context = ServiceContext.from_defaults(llm=llm, chunk_size=1000)
@@ -265,6 +265,43 @@ blocks = [
     },
 ]
    
+@slack_app.command("commons")
+def handle_commons_command(ack, say, command, client):
+    # Acknowledge the command request
+    ack()
+
+    user_id = command['user_id']  # Extract the user ID from the command
+    channel_id = command['channel_id']  # Extract the channel ID from the command
+    query = command['text']  # Extract the text part of the command which is the query
+
+    print(f"Received commons query: {query}")
+
+        # Example of sending an initial response
+    client.chat_postEphemeral(
+        channel=channel_id,
+        user=user_id,
+        text="Processing your query... :thinking_face:"
+    )
+
+    commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=context)
+    response = commons_agent.chat(query)
+    # response_1 = query_engine_links.query(query)
+    # response_2 = query_engine_transcripts.query(query)
+    # response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
+    # print("Context was:")
+    # print(response_1.source_nodes)
+    # print(response_2.source_nodes)
+
+    formatted_response = convert_markdown_links_to_slack(str(response))
+    print(f"Response: {formatted_response}")
+
+    # Send response only to user
+    client.chat_postEphemeral(
+        channel=channel_id,
+        user=user_id,
+        text=formatted_response
+    )
+
 @slack_app.message()
 def reply(message, say, client):
     user_id = message['user']  # Extract the user ID from the message
@@ -285,7 +322,6 @@ def reply(message, say, client):
                             query = element.get('text')
                             print(f"Somebody asked the bot: {query}")
 
-                            # Use chat_postEphemeral to send a reply only visible to the user
                             client.chat_postEphemeral(
                                 channel=channel_id,
                                 user=user_id,
@@ -305,12 +341,17 @@ def reply(message, say, client):
 
                             print(f"Response was: {formatted_response}")
 
-                            # Use chat_postEphemeral to send a reply only visible to the user
-                            client.chat_postEphemeral(
+                            # Send the final response visible to everyone in the channel
+                            client.chat_postMessage(
                                 channel=channel_id,
-                                user=user_id,
-                                text=str(formatted_response)  # Send the response text
+                                text=str(formatted_response)
                             )
+                            #  # Send reply only visible only to the user
+                            # client.chat_postEphemeral(
+                            #     channel=channel_id,
+                            #     user=user_id,
+                            #     text=str(formatted_response)  # Send the response text
+                            # )
                             return
 
     # dt_object = datetime.datetime.fromtimestamp(float(message.get('ts')))
@@ -370,6 +411,7 @@ def handle_help_command(ack, body, client):
 
 - `/onboard`: Get started with the bot and set up your profile.
 - `/help`: Show this help message.
+- `/commons`: Ask a question to the bot about OpenShift Commons.
 
 *Interactions:*
 - Select your role from the buttons provided to get personalized channel recommendations.
