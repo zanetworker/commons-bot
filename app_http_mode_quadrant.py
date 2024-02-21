@@ -217,8 +217,8 @@ def convert_markdown_links_to_slack(text):
 
     return text
 
-# llm = OpenAI(model="gpt-4-turbo-preview", temperature=0.0, stop=["\n", "Here is the URL of the video you might like:"])
-llm = OpenAI(model="gpt-4", temperature=0.0, stop=["\n", "Here is the URL of the video you might like:"])
+llm = OpenAI(model="gpt-4-turbo-preview", temperature=0.0, stop=["\n"])
+# llm = OpenAI(model="gpt-4", temperature=0.0, stop=["\n", "Here is the URL of the video you might like:"])
 
 # llm = OpenAI(model="gpt-3.5-turbo-0613", temperature=0.0, max_tokens=100, top_p=1.0, frequency_penalty=0.0, presence_penalty=0.0, stop=["\n", "Here is the URL of the video you might like:"])
 
@@ -234,11 +234,11 @@ collection_exists = client.get_collection(collection_name=collection)
 index = None
 index_transcripts = None
 
-youtube_video_links = load_youtube_links()
-youtube_transcripts = load_youtube_transcripts()
 
 if not collection_exists:
     print("Collection does not exist, creating new index")
+    youtube_video_links = load_youtube_links()
+    youtube_transcripts = load_youtube_transcripts()
     index = create_index(youtube_video_links, storage_context=storage_context, service_context=service_context)
     index_transcripts = create_index(youtube_transcripts)
 else:
@@ -268,6 +268,7 @@ template = (
     "\n---------------------\n"
     "You are a helpful AI assistant who can provide me which video is best matching to my query. \n"
     "give me the most relevant videos URLs from the context I gave you: {query_str}\n"
+    "format reply for slack like this: Here are some relevant videos you might like: [Title](URL) \n"
 )
 
 # You are a stock market sorcerer who is an expert on the companies Lyft and Uber.\
@@ -275,11 +276,12 @@ template = (
 #     and veteran stock market investor.
 # ""
 context = """
-You are a youtube link sorcerer who is an expert OpenShift commons.\
-You will answer questions about OpenShift and cloud-native topics in the perso  na of a sorcerer. \
-You will give links from the context and corpus you were provided, make sure the links are well formatted.\
-if you don't find a link, provide a link to a video that you think is relevant to the query. \
+You are a youtube links and videos sorcerer who is an expert OpenShift commons and cloud-native technologies.\
+You will answer questions about OpenShift and cloud-native topics in the persona of a sorcerer. \
+You will give multiple links from the context and corpus you were provided, make sure the links are well formatted.\
+if you don't find a link, provide a link to a video that you think is VERY relevant to the query. \
 Also use slack_tools to search for similar questions and provide the best answer. \
+Make sure you use slack formatting\
 """
 
 template_transcripts = (
@@ -395,11 +397,11 @@ def handle_commons_command(ack, say, command, client):
         text="Processing your query... :thinking_face:"
     )
 
-    commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=context)
-    response = commons_agent.chat(query)
-    # response_1 = query_engine_links.query(query)
-    # response_2 = query_engine_transcripts.query(query)
-    # response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
+    # commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=context)
+    # response = commons_agent.chat(query)
+    response_1 = query_engine_links.query(query)
+    response_2 = query_engine_transcripts.query(query)
+    response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
     # print("Context was:")
     # print(response_1.source_nodes)
     # print(response_2.source_nodes)
@@ -419,6 +421,7 @@ def reply(message, say, client):
     user_id = message['user']  # Extract the user ID from the message
     channel_id = message['channel']  # Extract the channel ID from the message
     blocks = message.get('blocks')
+    thread_ts = message.get('thread_ts', None)  # Default to None if thread_ts isn't present
     print(blocks)
 
     if blocks:
@@ -437,12 +440,13 @@ def reply(message, say, client):
                             client.chat_postEphemeral(
                                 channel=channel_id,
                                 user=user_id,
-                                text="Thinking... :thinking_face:"  # Send the response text
+                                text="Thinking... :thinking_face:",  # Send the response text
+                                thread_ts=thread_ts  # Include this to respond in the thread if the original message was part of one
                             )
 
                             commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=context)
                             response = commons_agent.chat(query)
-                            
+
                             # response_1 = query_engine_links.query(query)
                             # response_2 = query_engine_transcripts.query(query)
                             # response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
@@ -457,7 +461,9 @@ def reply(message, say, client):
                             # Send the final response visible to everyone in the channel
                             client.chat_postMessage(
                                 channel=channel_id,
-                                text=str(formatted_response)
+                                text=str(formatted_response),
+                                thread_ts=thread_ts  # Include this to respond in the thread if the original message was part of one
+
                             )
                             #  # Send reply only visible only to the user
                             # client.chat_postEphemeral(
@@ -502,12 +508,14 @@ def handle_onboard_command(ack, body, client):
     ack()
     user_id = body["user_id"]
     channel_id = body["channel_id"]
+    thread_ts = body.get('thread_ts', None)  # Get thread_ts if present
 
     # Use chat_postEphemeral to send a message only visible to the user
     client.chat_postEphemeral(
         channel=channel_id,
         user=user_id,
         blocks=blocks,
+        thread_ts=thread_ts,
         text=f"Welcome <@{user_id}>"
     )
 
