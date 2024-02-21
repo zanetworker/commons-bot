@@ -10,6 +10,7 @@ from tool_specs import SlackToolSpec
 
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
+
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_sdk import WebClient, WebhookClient
@@ -23,13 +24,14 @@ from llama_index.schema import TextNode
 from llama_index.prompts import PromptTemplate
 from llama_index.tools import QueryEngineTool, ToolMetadata
 from llama_index.agent import ReActAgent
-
-# from llama_index.postprocessor import FixedRecencyPostprocessor
-from llama_index import download_loader
-from llama_hub.youtube_transcript import YoutubeTranscriptReader
-from llama_index import VectorStoreIndex, Document, StorageContext, ServiceContext
-
+from llama_index import VectorStoreIndex,load_index_from_storage,  Document, StorageContext, ServiceContext, download_loader
 from llama_index.llms import OpenAI
+
+from llama_hub.youtube_transcript import YoutubeTranscriptReader
+
+import graphsignal
+
+graphsignal.configure(api_key=os.environ['GRAPH_SIGNAL_API_KEY'], deployment='commons-bot')
 
 # Load environment variables from .env file or Lambda environment
 load_dotenv()
@@ -75,7 +77,6 @@ def load_youtube_transcripts():
     'https://www.youtube.com/watch?v=6Os9JMNCDXY',
     'https://www.youtube.com/watch?v=Nw3eMHWDCUc',
     'https://www.youtube.com/watch?v=M2rdwyFzx2M',
-    # 'https://www.youtube.com/watch?v=YFSJIwboOjk',
     'https://www.youtube.com/watch?v=HDkwtVbuL1w',
     'https://www.youtube.com/watch?v=IMs9gdXXB1s',
     'https://www.youtube.com/watch?v=K1KNXzOTK-0',
@@ -87,8 +88,105 @@ def load_youtube_transcripts():
     'https://www.youtube.com/watch?v=qNgtxU5XOrg',
     'https://www.youtube.com/watch?v=aVq69JzC6jM',
     'https://www.youtube.com/watch?v=_3IfYLb_bbE', 
-    # 'https://www.youtube.com/watch?v=UXls_JfzyG8',
-    # 'https://www.youtube.com/watch?v=ciCncHHadlo'
+    'https://www.youtube.com/watch?v=3vjOCOLXExQ',
+    'https://www.youtube.com/watch?v=zcO2qR2dbdo',
+    'https://www.youtube.com/watch?v=RCwcEZtba4E',
+    'https://www.youtube.com/watch?v=bIruzpvRe74',
+    'https://www.youtube.com/watch?v=9YLMf-d_Kqk',
+    'https://www.youtube.com/watch?v=lojstGGfB3E',
+    'https://www.youtube.com/watch?v=M6bqUfIecKA',
+    'https://www.youtube.com/watch?v=lQHMRXGB_pY',
+    'https://www.youtube.com/watch?v=RYP6ZntTby4',
+    'https://www.youtube.com/watch?v=eT5Dz3fziQY',
+    'https://www.youtube.com/watch?v=Q05O1H0UxaI',
+    'https://www.youtube.com/watch?v=1082Lke8rz0',
+    'https://www.youtube.com/watch?v=PTo2soO20Fs',
+    'https://www.youtube.com/watch?v=L4tk3b5uTEI',
+    'https://www.youtube.com/watch?v=tnmoGz9JBQA',
+    'https://www.youtube.com/watch?v=nJJdfw_ymfU',
+    'https://www.youtube.com/watch?v=fJXRHsxLnI4',
+    'https://www.youtube.com/watch?v=tissYjujjiE',
+    'https://www.youtube.com/watch?v=mpzr_HOPSkE',
+    'https://www.youtube.com/watch?v=7rl1OVUlx1k',
+    'https://www.youtube.com/watch?v=MKSzBZ3-mvQ',
+    'https://www.youtube.com/watch?v=csgCyfnq7qs',
+    'https://www.youtube.com/watch?v=N4tt8_VP1o0',
+    'https://www.youtube.com/watch?v=yl5MtiQqbsQ',
+    'https://www.youtube.com/watch?v=tVSPTrf_JXU',
+    'https://www.youtube.com/watch?v=r75lTd_lKyQ',
+    'https://www.youtube.com/watch?v=AKPB2IQ-ew0',
+    'https://www.youtube.com/watch?v=ZYXAfCCEKS0',
+    'https://www.youtube.com/watch?v=JcdB55yLGbg',
+    'https://www.youtube.com/watch?v=lHkZOu0EMys',
+    'https://www.youtube.com/watch?v=MYyikxV0l-o',
+    'https://www.youtube.com/watch?v=OqGfwy0d7b8',
+    'https://www.youtube.com/watch?v=e86IbJaPIFQ',
+    'https://www.youtube.com/watch?v=PuMA5OrJtXo',
+    'https://www.youtube.com/watch?v=Kk5SRhxSCmM',
+    'https://www.youtube.com/watch?v=aELiz-g12dk',
+    'https://www.youtube.com/watch?v=Gf0d7q4ZEfw',
+    'https://www.youtube.com/watch?v=XO2k1oqy9qU',
+    'https://www.youtube.com/watch?v=5a377Rda79U',
+    'https://www.youtube.com/watch?v=dIG3gLmDRXg',
+    'https://www.youtube.com/watch?v=TqpNf1xt2ZQ',
+    'https://www.youtube.com/watch?v=0bqwVuSV9ho',
+    'https://www.youtube.com/watch?v=UejmEiAptFE',
+    'https://www.youtube.com/watch?v=_Gft7jkmxTI',
+    'https://www.youtube.com/watch?v=8_6MQdtd2ww',
+    'https://www.youtube.com/watch?v=fe-OhqT_kxA',
+    'https://www.youtube.com/watch?v=SKbA4b2JZOg',
+    'https://www.youtube.com/watch?v=anaB7pBL9uU',
+    'https://www.youtube.com/watch?v=cJUunrXVT50',
+    'https://www.youtube.com/watch?v=OXPkHNoWOec',
+    'https://www.youtube.com/watch?v=1KNFnQG2b5w',
+    'https://www.youtube.com/watch?v=Mz4R4iDDm0M',
+    'https://www.youtube.com/watch?v=HfsJqqjmiZo',
+    'https://www.youtube.com/watch?v=1ddxwZWSgtY',
+    'https://www.youtube.com/watch?v=J_c2_yBJ5bs',
+    'https://www.youtube.com/watch?v=KizNQTpRA2A',
+    'https://www.youtube.com/watch?v=3S855TdwhH4',
+    'https://www.youtube.com/watch?v=_Cug1C744Ug',
+    'https://www.youtube.com/watch?v=FZNcX2SosjU',
+    'https://www.youtube.com/watch?v=tfnHap8K9cM',
+    'https://www.youtube.com/watch?v=kBmLBHc16eA',
+    'https://www.youtube.com/watch?v=YF3S9WqWZpU',
+    'https://www.youtube.com/watch?v=KQmiM06tsEE',
+    'https://www.youtube.com/watch?v=S6Obo7pw6p4',
+    'https://www.youtube.com/watch?v=Tt0RlJYrcC8',
+    'https://www.youtube.com/watch?v=p1UNdLqJ9sQ',
+    'https://www.youtube.com/watch?v=lsltHGUZ6nE',
+    'https://www.youtube.com/watch?v=aq1VFOiLi_0',
+    'https://www.youtube.com/watch?v=v6s5KznHULs',
+    'https://www.youtube.com/watch?v=4L0R6Ews5uY',
+    'https://www.youtube.com/watch?v=b-QtgBEgt-c',
+    'https://www.youtube.com/watch?v=U1e7nRA843E',
+    'https://www.youtube.com/watch?v=mvcPzQHpUW0',
+    'https://www.youtube.com/watch?v=vae2Wx5LLYg',
+    'https://www.youtube.com/watch?v=vQUhtN0Vjro',
+    'https://www.youtube.com/watch?v=4_Duwdhi1aA',
+    'https://www.youtube.com/watch?v=c2suFsA4Evw',
+    'https://www.youtube.com/watch?v=6BD3pknWwvY',
+    'https://www.youtube.com/watch?v=T1YSBXP9T9s',
+    'https://www.youtube.com/watch?v=szEz9Ocnao0',
+    'https://www.youtube.com/watch?v=dJe857oQV4Q',
+    'https://www.youtube.com/watch?v=LrIvFQaq_Zo',
+    'https://www.youtube.com/watch?v=awgmTOLxYOE',
+    'https://www.youtube.com/watch?v=X8eg0RuGYG0',
+    'https://www.youtube.com/watch?v=-MNGRqubMw4',
+    'https://www.youtube.com/watch?v=Nwz2aGoqjE0',
+    'https://www.youtube.com/watch?v=y0_-CAcRnUk',
+    'https://www.youtube.com/watch?v=o-qae0vJ3Aw',
+    'https://www.youtube.com/watch?v=kMnIGSb3T8w',
+    'https://www.youtube.com/watch?v=mWdglzUb6vY',
+    'https://www.youtube.com/watch?v=6YMfzqHXfqg',
+    'https://www.youtube.com/watch?v=ZIKq0W9z31I',
+    'https://www.youtube.com/watch?v=-PCLnEoIZp4',
+    'https://www.youtube.com/watch?v=i5wd_qZdc8Y',
+    'https://www.youtube.com/watch?v=SVk_IIT0O2E',
+    'https://www.youtube.com/watch?v=SESq3OZxNBY',
+    'https://www.youtube.com/watch?v=DhpDqa7oxzI',
+    'https://www.youtube.com/watch?v=fnH60GhaZ1w',
+    'https://www.youtube.com/watch?v=5cueeNm667U',
 ]
     return loader.load_data(ytlinks=ytlinks)
 
@@ -98,7 +196,7 @@ def load_index(vector_store, storage_context, service_context):
 def create_index(documents, storage_context, service_context):
     return VectorStoreIndex.from_documents(documents, storage_context=storage_context, service_context=service_context)
 
-def create_query_engine(index, similarity_top_k=2, streaming=True, chat=False):
+def create_query_engine(index, similarity_top_k=5, streaming=True, chat=False):
     return index.as_chat_engine(streaming=streaming, similarity_top_k=similarity_top_k) if chat else index.as_query_engine(similarity_top_k=similarity_top_k, streaming=streaming)
 
 def format_links_for_slack(text):
@@ -119,7 +217,9 @@ def convert_markdown_links_to_slack(text):
 
     return text
 
-llm = OpenAI(model="gpt-4-turbo-preview", temperature=0.0, stop=["\n", "Here is the URL of the video you might like:"])
+# llm = OpenAI(model="gpt-4-turbo-preview", temperature=0.0, stop=["\n", "Here is the URL of the video you might like:"])
+llm = OpenAI(model="gpt-4", temperature=0.0, stop=["\n", "Here is the URL of the video you might like:"])
+
 # llm = OpenAI(model="gpt-3.5-turbo-0613", temperature=0.0, max_tokens=100, top_p=1.0, frequency_penalty=0.0, presence_penalty=0.0, stop=["\n", "Here is the URL of the video you might like:"])
 
 service_context = ServiceContext.from_defaults(llm=llm, chunk_size=1000)
@@ -134,16 +234,28 @@ collection_exists = client.get_collection(collection_name=collection)
 index = None
 index_transcripts = None
 
+youtube_video_links = load_youtube_links()
+youtube_transcripts = load_youtube_transcripts()
+
 if not collection_exists:
     print("Collection does not exist, creating new index")
-    youtube_video_links = load_youtube_links()
-    youtube_transcripts = load_youtube_transcripts()
     index = create_index(youtube_video_links, storage_context=storage_context, service_context=service_context)
     index_transcripts = create_index(youtube_transcripts)
 else:
     print("Collection does exist, loading index from storage")
+    # Run refresh_ref_docs method to check for document updates
+
     index = load_index(vector_store=vector_store, storage_context=storage_context, service_context=service_context)
     index_transcripts = index # use the same index for both links and transcripts
+
+    # refreshed_youtube_links = index.refresh_ref_docs(youtube_video_links, update_kwargs={"delete_kwargs": {'delete_from_docstore': True}})
+    # print(refreshed_youtube_links)
+    # print('Number of newly inserted/refreshed_youtube_links docs: ', sum(refreshed_youtube_links))
+
+    # refreshed_youtube_transcripts = index.refresh_ref_docs(youtube_transcripts, update_kwargs={"delete_kwargs": {'delete_from_docstore': True}})
+    # print(refreshed_youtube_links)
+    # print('Number of newly inserted/refreshed_youtube_transcripts docs: ', sum(refreshed_youtube_transcripts))
+
 
 query_engine_links = create_query_engine(index, chat=False)
 query_engine_transcripts = create_query_engine(index_transcripts, chat=False)
@@ -154,8 +266,8 @@ template = (
     "---------------------\n"
     "{context_str}"
     "\n---------------------\n"
-    "You are a helpful AI assistant who can tell me which video is best matching to my query. \n"
-    "give me the most relevant video URL from the context I gave you: {query_str}\n"
+    "You are a helpful AI assistant who can provide me which video is best matching to my query. \n"
+    "give me the most relevant videos URLs from the context I gave you: {query_str}\n"
 )
 
 # You are a stock market sorcerer who is an expert on the companies Lyft and Uber.\
@@ -330,6 +442,7 @@ def reply(message, say, client):
 
                             commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=context)
                             response = commons_agent.chat(query)
+                            
                             # response_1 = query_engine_links.query(query)
                             # response_2 = query_engine_transcripts.query(query)
                             # response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2

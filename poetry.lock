@@ -924,6 +924,19 @@ protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.1 || >4.21.1,<4
 grpc = ["grpcio (>=1.44.0,<2.0.0.dev0)"]
 
 [[package]]
+name = "graphsignal"
+version = "0.13.50"
+description = "Graphsignal Tracer"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "graphsignal-0.13.50.tar.gz", hash = "sha256:9a5ccea496c13964eb12355a9f6b42c37331eb80748a01895dd2e2218c5c2798"},
+]
+
+[package.dependencies]
+protobuf = ">3.0"
+
+[[package]]
 name = "greenlet"
 version = "3.0.3"
 description = "Lightweight in-process concurrent programming"
@@ -3949,4 +3962,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.12"
-content-hash = "2ff25a412baeab74a57c8e766061508a5f7303941d896dcbc75100edfb307573"
+content-hash = "f86999055e11ef484c6fe9146bd0acff9a4fa603bc55f18173f7541b4d0f2a2e"

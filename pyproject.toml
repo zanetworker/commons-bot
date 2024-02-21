@@ -19,6 +19,7 @@ openpyxl = "^3.1.2"
 youtube-transcript-api = "^0.6.2"
 weaviate-client = "^4.4.4"
 nest-asyncio = "^1.6.0"
+graphsignal = "^0.13.50"
 
 
 [build-system]
