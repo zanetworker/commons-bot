@@ -248,9 +248,9 @@ index_transcripts = None
 
 if not collection_exists:
     print("Collection does not exist, creating new index")
-    youtube_video_links = load_youtube_links()
+    # youtube_video_links = load_youtube_links()
     youtube_transcripts = load_youtube_transcripts()
-    index = create_index(documents=youtube_video_links, storage_context=storage_context, service_context=service_context)
+    # index = create_index(documents=youtube_video_links, storage_context=storage_context, service_context=service_context)
     index_transcripts = create_index(documents=youtube_transcripts, storage_context=storage_context, service_context=service_context)
 else:
     print("Collection does exist, loading index from storage")
@@ -260,7 +260,7 @@ else:
     index_transcripts = index # use the same index for both links and transcripts
 
 
-query_engine_links = create_query_engine(index, chat=False)
+# query_engine_links = create_query_engine(index, chat=False)
 query_engine_transcripts = create_query_engine(index_transcripts, chat=False)
 
 template = (
@@ -303,12 +303,12 @@ For Lists, use unordered lists. \
 """
 
 
-qa_template = PromptTemplate(template)   
+# qa_template = PromptTemplate(template)   
 qa_template_transcripts = PromptTemplate(template_transcripts)
 
-query_engine_links.update_prompts(
-        {"response_synthesizer:text_qa_template": qa_template}
-)
+# query_engine_links.update_prompts(
+#         {"response_synthesizer:text_qa_template": qa_template}
+# )
 query_engine_transcripts.update_prompts(
         {"response_synthesizer:text_qa_template": qa_template_transcripts}
 )
@@ -329,13 +329,13 @@ feed_tool = feed_tool_spec.to_tool_list()
 query_engine_tools = [
     *slack_tool,
     *feed_tool,
-    QueryEngineTool(
-        query_engine=query_engine_links,
-        metadata=ToolMetadata(
-            name="youtube_links",
-            description="Links for OpenShift commons videos. Each input has a url, and a title for the video indicating what the video was about.",
-        ),
-    ),
+    # QueryEngineTool(
+    #     query_engine=query_engine_links,
+    #     metadata=ToolMetadata(
+    #         name="youtube_links",
+    #         description="Links for OpenShift commons videos. Each input has a url, and a title for the video indicating what the video was about.",
+    #     ),
+    # ),
     QueryEngineTool(
         query_engine=query_engine_transcripts,
         metadata=ToolMetadata(
@@ -413,9 +413,10 @@ def handle_commons_command(ack, say, command, client):
 
         # commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=agentContext)
         # response = commons_agent.chat(query)
-        response_1 = query_engine_links.query(query)
+        # response_1 = query_engine_links.query(query)
         response_2 = query_engine_transcripts.query(query)
-        response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
+        # response = f"{response_1}\n\n{response_2}"
+        response = response_2  # Formulate the response by joining response_1 and response_2
         # print("Context was:")
         # print(response_1.source_nodes)
         # print(response_2.source_nodes)
@@ -649,10 +650,23 @@ def slack_interactive():
     suggested_channels_text = "\n".join([f"- <#{channel['id']}|{channel['name']}>" for channel in suggested_channels])
     kubecon_paris = {"name": "kubecon_paris", "id": "C06HFFNHVPA"}
 
+
+    help_message = """
+*Here are more things you can do*
+
+- `/help`: Show this help message.
+- `/commons`: Ask a question to the bot about OpenShift Commons that is only visible to you.
+- Ask questions and receive recommendation, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" 
+The bot will then search through it's knowledge to provide you with relevant information.
+
+If you have any questions or need further assistance, feel free to ask here! Also make sure to check https://commons.openshift.org/ for more information.
+    """
+
     # Prepare the response message
     response_text = f"<@{user_id}> based on your interest in {role}, we suggest you join the following channels:\n{suggested_channels_text}"
     response_text += f"\n- <#{kubecon_paris['id']}|{kubecon_paris['name']}> (also check out KubeCon Paris Channel)"
-
+# append response_text with help_message to use the bot 
+    response_text += f"\n\n{help_message}"
 
     # create slack_client
     slack_client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
