@@ -20,6 +20,7 @@ youtube-transcript-api = "^0.6.2"
 weaviate-client = "^4.4.4"
 nest-asyncio = "^1.6.0"
 graphsignal = "^0.13.50"
+feedparser = "^6.0.11"
 
 
 [build-system]

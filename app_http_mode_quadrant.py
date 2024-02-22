@@ -6,7 +6,7 @@ import sys
 import datetime, uuid
 from pathlib import Path
 import nest_asyncio
-from tool_specs import SlackToolSpec
+from tool_specs import SlackToolSpec, FeedSpec
 
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
@@ -16,7 +16,8 @@ from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_sdk import WebClient, WebhookClient
 
 # import qdrant_client
-import qdrant_client 
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
 
 # import qdrant_client
 from llama_index.vector_stores import QdrantVectorStore
@@ -43,11 +44,11 @@ logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 # initialize index
 def get_qdrant_client():
-    return qdrant_client.QdrantClient(path="./qdrant_data")
+    return QdrantClient(path="./qdrant_data")
 
 def get_qdrant_cloud_client():
-    return  qdrant_client.QdrantClient(
-    url="https://42bbc9fd-ac0c-4cea-9dd3-febccefd882b.us-east4-0.gcp.cloud.qdrant.io:6333", 
+    return  QdrantClient(
+    url=os.environ["QD_ENDPOINT"], 
     api_key=os.environ["QD_API_KEY"],
 )
 
@@ -59,6 +60,7 @@ def load_youtube_links():
 def load_youtube_transcripts():
     loader = YoutubeTranscriptReader()
     ytlinks = [
+    'https://youtu.be/ZxvbQbT_wkc?feature=shared',   
     'https://www.youtube.com/watch?v=RzxzY1dluvo',
     'https://www.youtube.com/watch?v=ZTsgcnxQyw4',
     'https://www.youtube.com/watch?v=m-p7jmXoQdk', 
@@ -226,35 +228,36 @@ service_context = ServiceContext.from_defaults(llm=llm, chunk_size=1000)
 
 collection = "commons"
 client = get_qdrant_cloud_client()
+
+collection_exists = False
+try: 
+    collection_exists = client.get_collection(collection_name=collection)
+except: 
+    client.create_collection(
+        collection_name=collection,
+        # OpenAI embedding is 1536, Gemini is 768 (we need to adjust vector size accordingly)
+        vectors_config=models.VectorParams(size=1536, distance=models.Distance.COSINE),
+)
+
 vector_store = QdrantVectorStore(client=client, collection_name=collection, service_context=service_context)
 storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
-collection_exists = client.get_collection(collection_name=collection)
 
 index = None
 index_transcripts = None
-
 
 if not collection_exists:
     print("Collection does not exist, creating new index")
     youtube_video_links = load_youtube_links()
     youtube_transcripts = load_youtube_transcripts()
-    index = create_index(youtube_video_links, storage_context=storage_context, service_context=service_context)
-    index_transcripts = create_index(youtube_transcripts)
+    index = create_index(documents=youtube_video_links, storage_context=storage_context, service_context=service_context)
+    index_transcripts = create_index(documents=youtube_transcripts, storage_context=storage_context, service_context=service_context)
 else:
     print("Collection does exist, loading index from storage")
     # Run refresh_ref_docs method to check for document updates
 
     index = load_index(vector_store=vector_store, storage_context=storage_context, service_context=service_context)
     index_transcripts = index # use the same index for both links and transcripts
-
-    # refreshed_youtube_links = index.refresh_ref_docs(youtube_video_links, update_kwargs={"delete_kwargs": {'delete_from_docstore': True}})
-    # print(refreshed_youtube_links)
-    # print('Number of newly inserted/refreshed_youtube_links docs: ', sum(refreshed_youtube_links))
-
-    # refreshed_youtube_transcripts = index.refresh_ref_docs(youtube_transcripts, update_kwargs={"delete_kwargs": {'delete_from_docstore': True}})
-    # print(refreshed_youtube_links)
-    # print('Number of newly inserted/refreshed_youtube_transcripts docs: ', sum(refreshed_youtube_transcripts))
 
 
 query_engine_links = create_query_engine(index, chat=False)
@@ -269,20 +272,8 @@ template = (
     "You are a helpful AI assistant who can provide me which video is best matching to my query. \n"
     "give me the most relevant videos URLs from the context I gave you: {query_str}\n"
     "format reply for slack like this: Here are some relevant videos you might like: [Title](URL) \n"
+    "If you don't have the URL, provide a link to a video that you think is VERY relevant to the query. \n"
 )
-
-# You are a stock market sorcerer who is an expert on the companies Lyft and Uber.\
-#     You will answer questions about Uber and Lyft as in the persona of a sorcerer \
-#     and veteran stock market investor.
-# ""
-context = """
-You are a youtube links and videos sorcerer who is an expert OpenShift commons and cloud-native technologies.\
-You will answer questions about OpenShift and cloud-native topics in the persona of a sorcerer. \
-You will give multiple links from the context and corpus you were provided, make sure the links are well formatted.\
-if you don't find a link, provide a link to a video that you think is VERY relevant to the query. \
-Also use slack_tools to search for similar questions and provide the best answer. \
-Make sure you use slack formatting\
-"""
 
 template_transcripts = (
     "Your context is a list of youtube transcripts. Each transcript is for a video that talks about a certain topic \n"
@@ -290,9 +281,27 @@ template_transcripts = (
     "{context_str}"
     "\n---------------------\n"
     "You are a helpful AI assistant who can pick the best information from the transcripts. \n"
-    "give me the most relevant information from the best transcript in the form of a paragraph. Start your reply with \"here is some additional information you might like\" \n" 
-    "and share the URL of the video you got the infromation from: {query_str}\n"
+    "give me the most relevant information from the best transcripts in the form of a paragraph. \n"
+    "Share the URLs of the video you got the infromation from: {query_str}\n"
+    "Make sure the response is formated nicely to be read on slack especially for lists. \n"
+    "For Lists, use unordered lists. \n"
+    "Make sure the URLs are correct and well formatted. \n"
+    "If you don't have the URL, provide a link to a video that you think is VERY relevant to the query. \n"
 )
+
+agentContext = """
+You are a youtube links and videos sorcerer who is an expert OpenShift commons and cloud-native technologies.\
+You will answer questions about OpenShift and cloud-native topics in the persona of a sorcerer. \
+You will give multiple links from the context and corpus you were provided, make sure the links are well formatted.\
+If you don't have the URL, provide a link to a video that you think is VERY relevant to the query.\
+Make sure the link you share and it's title match, don't send wrong links. \
+if you don't find a link, provide a link to a video that you think is VERY relevant to the query. \
+Use slack_tools to search for similar questions and provide the best answer. \
+Use feed_tools to fetch news and updates about OpenShift, Kubernetes and cloud-native technologies. \
+Make sure the response is formated nicely to be read on slack especially for lists. \
+For Lists, use unordered lists. \
+"""
+
 
 qa_template = PromptTemplate(template)   
 qa_template_transcripts = PromptTemplate(template_transcripts)
@@ -314,8 +323,12 @@ slack_client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
 slack_tool_spec = SlackToolSpec(client=slack_client)
 slack_tool = slack_tool_spec.to_tool_list()
 
+feed_tool_spec = FeedSpec()
+feed_tool = feed_tool_spec.to_tool_list()
+
 query_engine_tools = [
     *slack_tool,
+    *feed_tool,
     QueryEngineTool(
         query_engine=query_engine_links,
         metadata=ToolMetadata(
@@ -381,40 +394,48 @@ blocks = [
    
 @slack_app.command("/commons")
 def handle_commons_command(ack, say, command, client):
-    # Acknowledge the command request
-    ack()
+    try:
+        # Acknowledge the command request
+        ack()
 
-    user_id = command['user_id']  # Extract the user ID from the command
-    channel_id = command['channel_id']  # Extract the channel ID from the command
-    query = command['text']  # Extract the text part of the command which is the query
+        user_id = command['user_id']  # Extract the user ID from the command
+        channel_id = command['channel_id']  # Extract the channel ID from the command
+        query = command['text']  # Extract the text part of the command which is the query
 
-    print(f"Received commons query: {query}")
+        print(f"Received commons query: {query}")
 
         # Example of sending an initial response
-    client.chat_postEphemeral(
-        channel=channel_id,
-        user=user_id,
-        text="Processing your query... :thinking_face:"
-    )
+        client.chat_postEphemeral(
+            channel=channel_id,
+            user=user_id,
+            text="Processing your query... :thinking_face:"
+        )
 
-    # commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=context)
-    # response = commons_agent.chat(query)
-    response_1 = query_engine_links.query(query)
-    response_2 = query_engine_transcripts.query(query)
-    response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
-    # print("Context was:")
-    # print(response_1.source_nodes)
-    # print(response_2.source_nodes)
+        # commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=agentContext)
+        # response = commons_agent.chat(query)
+        response_1 = query_engine_links.query(query)
+        response_2 = query_engine_transcripts.query(query)
+        response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
+        # print("Context was:")
+        # print(response_1.source_nodes)
+        # print(response_2.source_nodes)
 
-    formatted_response = convert_markdown_links_to_slack(str(response))
-    print(f"Response: {formatted_response}")
+        formatted_response = convert_markdown_links_to_slack(str(response))
+        print(f"Response: {formatted_response}")
 
-    # Send response only to user
-    client.chat_postEphemeral(
-        channel=channel_id,
-        user=user_id,
-        text=formatted_response
-    )
+        # Send response only to user
+        client.chat_postEphemeral(
+            channel=channel_id,
+            user=user_id,
+            text=formatted_response
+        )
+    except Exception as e:
+        # Send error reply in case of error
+        client.chat_postEphemeral(
+            channel=channel_id,
+            user=user_id,
+            text=f"An error occurred, please try again later"
+        )
 
 @slack_app.message()
 def reply(message, say, client):
@@ -444,33 +465,40 @@ def reply(message, say, client):
                                 thread_ts=thread_ts  # Include this to respond in the thread if the original message was part of one
                             )
 
-                            commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=context)
-                            response = commons_agent.chat(query)
+                
+                            try_count = 0
+                            max_attempts = 5
 
-                            # response_1 = query_engine_links.query(query)
-                            # response_2 = query_engine_transcripts.query(query)
-                            # response = f"{response_1}\n\n{response_2}"  # Formulate the response by joining response_1 and response_2
-                            # print("Context was:")
-                            # print(response_1.source_nodes)
-                            # print(response_2.source_nodes)
+                            while try_count < max_attempts:
+                                try:
+                                    commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=agentContext)
+                                    response = commons_agent.chat(query)
 
-                            formatted_response = convert_markdown_links_to_slack(str(response))
+                                    formatted_response = convert_markdown_links_to_slack(str(response))
+                                    
+                                    print(f"Response was: {formatted_response}")
+                                    
+                                    # Send the final response visible to everyone in the channel
+                                    client.chat_postMessage(
+                                        channel=channel_id,
+                                        text=str(formatted_response),
+                                        thread_ts=thread_ts  # Include this to respond in the thread if the original message was part of one
+                                    )
+                                    
+                                    break  # Exit the loop if successful
+                                    
+                                except Exception as e:
+                                    print(f"An error occurred: {str(e)}")
+                                    try_count += 1
 
-                            print(f"Response was: {formatted_response}")
-
-                            # Send the final response visible to everyone in the channel
-                            client.chat_postMessage(
-                                channel=channel_id,
-                                text=str(formatted_response),
-                                thread_ts=thread_ts  # Include this to respond in the thread if the original message was part of one
-
-                            )
-                            #  # Send reply only visible only to the user
-                            # client.chat_postEphemeral(
-                            #     channel=channel_id,
-                            #     user=user_id,
-                            #     text=str(formatted_response)  # Send the response text
-                            # )
+                            if try_count == max_attempts:
+                                formatted_response = "I'm sorry, something went wrong. Please try again later. Checkout the OpenShift commons website: https://commons.openshift.org/ for more information"
+                                
+                                client.chat_postMessage(
+                                    channel=channel_id,
+                                    text=str(formatted_response),
+                                    thread_ts=thread_ts  # Include this to respond in the thread if the original message was part of one
+                                )
                             return
 
     # dt_object = datetime.datetime.fromtimestamp(float(message.get('ts')))
