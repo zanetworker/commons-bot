@@ -299,7 +299,7 @@ if you don't find a link, provide a link to a video that you think is VERY relev
 Use slack_tools to search for similar questions and provide the best answer. \
 Use feed_tools to fetch news and updates about OpenShift, Kubernetes and cloud-native technologies. \
 Make sure the response is formated nicely to be read on slack especially for lists. \
-For Lists, use unordered lists. \
+Use single asterisk (*) for bold text don't use (**). \
 """
 
 
@@ -652,7 +652,7 @@ def slack_interactive():
 
 
     help_message = """
-*Here are more things you can do*
+*Here are more things you can do:*
 
 - `/help`: Show this help message.
 - `/commons`: Ask a question to the bot about OpenShift Commons that is only visible to you.
