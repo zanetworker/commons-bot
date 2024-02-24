@@ -25,5 +25,5 @@ COPY . .
 EXPOSE 5002
 
 # Command to run the app
-CMD ["python", "app_http_mode.py"]
+CMD ["python", "commons-bot.py"]
 # CMD ["python", "app.py"]
