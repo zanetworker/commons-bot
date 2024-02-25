@@ -1,12 +1,17 @@
 import os
 from slack_sdk import WebClient
-from llama_index.postprocessor.flag_embedding_reranker import FlagEmbeddingReranker
-from llama_index.tools import QueryEngineTool, ToolMetadata
-from llama_index.prompts import PromptTemplate
+from llama_index.postprocessor.colbert_rerank.base import ColbertRerank
+
+from llama_index.core import PromptTemplate
+from llama_index.core.tools import QueryEngineTool, ToolMetadata
+from llama_index.core.agent import ReActAgent
+
 from tool_specs import SlackToolSpec, FeedSpec
+from memory_profiler import profile
 
 
 class QueryEngineManager:
+    # @profile
     def __init__(self, index):
         self.index = index
         self.templates = {
@@ -60,15 +65,26 @@ class QueryEngineManager:
     def get_agent_context(self):
         return self._agent_context
     
-    def create_query_engine(self, similarity_top_k=5, streaming=True, chat=False):
-        rerank = FlagEmbeddingReranker(model="BAAI/bge-reranker-large", top_n=5)
-        query_engine = self.index.as_chat_engine(streaming=streaming, similarity_top_k=similarity_top_k, rerank=rerank) if chat else self.index.as_query_engine(similarity_top_k=similarity_top_k, streaming=streaming, rerank=rerank)
+    def create_query_engine(self, similarity_top_k=5, streaming=True, chat=False, rerank=True):
+        if rerank:
+            colbert_reranker = ColbertRerank(
+                top_n=5,
+                model="colbert-ir/colbertv2.0",
+                tokenizer="colbert-ir/colbertv2.0",
+                keep_retrieval_score=True,
+            )
+
+            query_engine = self.index.as_chat_engine(streaming=streaming, similarity_top_k=similarity_top_k, node_postprocessors=[colbert_reranker]) if chat else self.index.as_query_engine(similarity_top_k=similarity_top_k, streaming=streaming, node_postprocessors=[colbert_reranker])
+        else:
+            query_engine = self.index.as_chat_engine(streaming=streaming, similarity_top_k=similarity_top_k) if chat else self.index.as_query_engine(similarity_top_k=similarity_top_k, streaming=streaming)
+        
         self._update_prompts(query_engine)
         return query_engine
 
 
 
 class QueryEngineToolsManager:
+    # @profile
     def __init__(self, query_engine):
         self._slack_tool_spec = SlackToolSpec(client=WebClient(token=os.environ["SLACK_BOT_TOKEN"]))
         self._feed_tool_spec = FeedSpec()

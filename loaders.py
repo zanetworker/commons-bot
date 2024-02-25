@@ -1,11 +1,14 @@
 import os
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
-from llama_hub.youtube_transcript import YoutubeTranscriptReader
+from qdrant_client.http.models import Distance, VectorParams
+from llama_index.readers.youtube_transcript import YoutubeTranscriptReader
+from memory_profiler import profile
 
 load_dotenv()
 
 class EnvironmentConfig:
+    # @profile
     def __init__(self):
         self.load_env()
 
@@ -32,9 +35,12 @@ class EnvironmentConfig:
         
     
 class QdrantClientManager:
-    def __init__(self, config):
+    # @profile
+    def __init__(self, config, collection_name):
         self.config = config
         self._client = None
+        self._collection_name = collection_name
+        
 
     @property
     def client(self):
@@ -42,11 +48,19 @@ class QdrantClientManager:
             if self.config.qd_endpoint and self.config.qd_api_key:
                 self._client = QdrantClient(url=self.config.qd_endpoint, api_key=self.config.qd_api_key)
             else:
-                self._client = QdrantClient(path="./qdrant_data")
+                # Initalizing a local client in-memory
+                self._client = QdrantClient(":memory:")
+                self._client.recreate_collection(
+                    collection_name="documents",
+                    # openai uses 1536 embedding sizes
+                    vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+                    )
         return self._client
-    
+
+
 
 class YouTubeLoader:
+    # @profile
     def __init__(self):
         # self.file_path = file_path
         self._ytlinks = None

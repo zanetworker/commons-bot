@@ -11,10 +11,10 @@ To set up the commons-bot app, follow these steps:
 3. Install the required packages by running the following command (use pip or poetry):
 
    ```shell
-   poetry install 
+   pip install -r requirements.txt
 
-   # or pip
-   python install -r requirements.txt
+   # or poetry
+   poetry install 
    ```
 
 4. Create a `.env` file in the project directory and add the following environment variables:

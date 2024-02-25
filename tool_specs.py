@@ -2,7 +2,7 @@ import logging
 from typing import List
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from llama_index.tools.tool_spec.base import BaseToolSpec
+from llama_index.core.tools.tool_spec.base import BaseToolSpec
 import feedparser
 
 from dotenv import load_dotenv

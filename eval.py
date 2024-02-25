@@ -1,21 +1,20 @@
 import time
-from llama_index.llms import OpenAI
-from llama_index import VectorStoreIndex, ServiceContext
+
+from llama_index.llms.openai import OpenAI
+from llama_index.core import ServiceContext 
 from llama_index.evaluation import FaithfulnessEvaluator, RelevancyEvaluator,  DatasetGenerator
+
 from index import IndexManager
 from loaders import YouTubeLoader, QdrantClientManager, EnvironmentConfig
 from query_engine import QueryEngineManager, QueryEngineToolsManager
-import graphsignal
-
-graphsignal.configure(api_key=os.environ['GRAPH_SIGNAL_API_KEY'], deployment='commons-bot')
 
 class ResponseEvaluator:
     def __init__(self, service_context):
         """
-        Initializes the evaluator with GPT-4 based Faithfulness and Relevancy evaluators.
+        Initializes the evaluator with configured llm (e.g., GPT-4) based Faithfulness and Relevancy evaluators.
 
         Args:
-            service_context_gpt4 (ServiceContext): The service context configured for GPT-4.
+            service_context (ServiceContext): The service context configured for llm (e.g.,GPT-4).
         """
         self.faithfulness_evaluator = FaithfulnessEvaluator(service_context=service_context)
         self.relevancy_evaluator = RelevancyEvaluator(service_context=service_context)
@@ -54,7 +53,7 @@ class ResponseEvaluator:
         total_relevancy = 0
 
         config = EnvironmentConfig()
-        qdrant_manager = QdrantClientManager(config)
+        qdrant_manager = QdrantClientManager(config, collection_name="commons")
         qdrant_client = qdrant_manager.client
 
 
@@ -106,6 +105,7 @@ def main():
     for chunk_size in chunk_sizes:
         service_context = ServiceContext.from_defaults(llm=llm)
 
+        # generate questions from nodes
         evaluator = ResponseEvaluator(service_context=service_context)
         eval_documents = YouTubeLoader().yttranscripts
         data_generator = DatasetGenerator.from_documents(documents=eval_documents)

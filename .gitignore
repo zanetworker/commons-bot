@@ -13,5 +13,6 @@ chroma_db
 # data/*
 additional_scripts
 venv
-app_lambda
-ngrok.yml
+app_*
+ngrok.*
+local-setup

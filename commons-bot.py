@@ -3,11 +3,9 @@ import logging
 import os
 import re
 import sys
-import datetime, uuid
-from pathlib import Path
 import nest_asyncio
 
-from llama_index import ServiceContext
+from llama_index.core import ServiceContext
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 
@@ -19,11 +17,10 @@ from loaders import QdrantClientManager, EnvironmentConfig, YouTubeLoader
 from query_engine import QueryEngineManager, QueryEngineToolsManager
 
 
-from llama_index.agent import ReActAgent
-from llama_index.llms import OpenAI
+from llama_index.core.agent.react import ReActAgent
+from llama_index.llms.openai import OpenAI
 
-
-# import graphsignal
+import graphsignal
 
 graphsignal.configure(api_key=os.environ['GRAPH_SIGNAL_API_KEY'], deployment='commons-bot')
 
@@ -56,14 +53,17 @@ def convert_markdown_links_to_slack(text):
     return text
 
 
+collecation_name = "commons"
 config = EnvironmentConfig()
-qdrant_manager = QdrantClientManager(config)
+qdrant_manager = QdrantClientManager(config, collecation_name)
 qdrant_client = qdrant_manager.client
 
 # Assuming 'client' is your initialized Qdrant client and 'youtube_transcripts' is your data
 llm = OpenAI(model="gpt-4", temperature=0.0, stop_symbols=["\n"])
 
-index_manager = IndexManager(qdrant_client, ServiceContext.from_defaults(llm=llm))
+# set chunk_size to 1024 higher relvancy and faithfulness (according to evaluation)
+service_context = ServiceContext.from_defaults(llm=llm, chunk_size=1024)
+index_manager = IndexManager(qdrant_client, service_context, collection_name=collecation_name)
 youtube_loader = YouTubeLoader()
 index = index_manager.create_or_load_index(youtube_transcripts=youtube_loader.yttranscripts)
 
