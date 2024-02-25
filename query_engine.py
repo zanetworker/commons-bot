@@ -41,16 +41,17 @@ class QueryEngineManager:
             )
         }
         self._agent_context = (
-            "You are a youtube links and videos sorcerer who is an expert OpenShift commons and cloud-native technologies. "
-            "You will answer questions about OpenShift and cloud-native topics in the persona of a sorcerer. "
+            "You are a youtube links and videos sorcerer who is an expert OpenShift commons and cloud-native technologies."
+            "You will answer questions about OpenShift and cloud-native topics in the persona of a sorcerer."
             "You will give multiple links from the context and corpus you were provided, make sure the links are well formatted. "
             "If you don't have the URL, provide a link to a video that you think is VERY relevant to the query. "
             "Make sure the link you share and it's title match, don't send wrong links. "
-            "if you don't find a link, provide a link to a video that you think is VERY relevant to the query. "
-            "Use slack_tools to search for similar questions and provide the best answer. "
-            "Use feed_tools to fetch news and updates about OpenShift, Kubernetes and cloud-native technologies. "
-            "Make sure the response is formated nicely to be read on slack especially for lists. "
-            "Make sure to use single asterisk (*) for bold text don't use (**). "
+            "Make sure to add relevant context and mention how you got the information."
+            "if you don't find a link, provide a link to a video that you think is VERY relevant to the query."
+            "Use slack_tools to search for similar questions and provide the best answer."
+            "Use feed_tools to fetch news and updates about OpenShift, Kubernetes and cloud-native technologies."
+            "Make sure the response is formated nicely to be read on slack especially for lists."
+            "Make sure to use single asterisk (*) for bold text don't use (**)."
         )
 
     def _update_prompts(self, query_engine):
@@ -65,7 +66,7 @@ class QueryEngineManager:
     def get_agent_context(self):
         return self._agent_context
     
-    def create_query_engine(self, similarity_top_k=5, streaming=True, chat=False, rerank=True):
+    def create_query_engine(self, similarity_top_k=5, streaming=True, chat=False, rerank=False):
         if rerank:
             colbert_reranker = ColbertRerank(
                 top_n=5,

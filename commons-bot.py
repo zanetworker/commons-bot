@@ -1,57 +1,43 @@
 import json
 import logging
 import os
-import re
 import sys
-import nest_asyncio
+from nest_asyncio import apply
+from graphsignal import configure
 
-from llama_index.core import ServiceContext
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_sdk import WebClient, WebhookClient
+
 from index import IndexManager
 from loaders import QdrantClientManager, EnvironmentConfig, YouTubeLoader
 from query_engine import QueryEngineManager, QueryEngineToolsManager
+from utils import convert_markdown_links_to_slack
 
-
+from llama_index.core import Settings, ServiceContext
 from llama_index.core.agent.react import ReActAgent
 from llama_index.llms.openai import OpenAI
+from llama_index.embeddings.openai import OpenAIEmbedding
 
-import graphsignal
 
-graphsignal.configure(api_key=os.environ['GRAPH_SIGNAL_API_KEY'], deployment='commons-bot')
+Settings.llm = OpenAI(model="gpt-4")
+Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
+# Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
+# Settings.num_output = 512
+# Settings.context_window = 3900
+
+configure(api_key=os.environ['GRAPH_SIGNAL_API_KEY'], deployment='commons-bot')
 
 # Load environment variables from .env file or Lambda environment
 load_dotenv()
-nest_asyncio.apply()
+apply()
 
 # even noisier debugging
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
-
-
-
-def format_links_for_slack(text):
-    # Regex pattern to identify URLs
-    url_pattern = r'(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)'
-    formatted_text = re.sub(url_pattern, r'<\1|Link>', text)  # Replace URLs with Slack formatted links
-    return formatted_text
-
-def convert_markdown_links_to_slack(text):
-    # Find all Markdown links in the text
-    markdown_links = re.findall(r'\[([^\]]+)\]\((http[s]?://[^)]+)\)', text)
-
-    # Replace each Markdown link with Slack's link format
-    for link_text, url in markdown_links:
-        slack_link = f"<{url}|{link_text}>"
-        markdown_link = f"[{link_text}]({url})"
-        text = text.replace(markdown_link, slack_link)
-
-    return text
-
 
 collecation_name = "commons"
 config = EnvironmentConfig()
@@ -59,10 +45,10 @@ qdrant_manager = QdrantClientManager(config, collecation_name)
 qdrant_client = qdrant_manager.client
 
 # Assuming 'client' is your initialized Qdrant client and 'youtube_transcripts' is your data
-llm = OpenAI(model="gpt-4", temperature=0.0, stop_symbols=["\n"])
+# llm = OpenAI(model="gpt-4", temperature=0.0, stop_symbols=["\n"])
 
 # set chunk_size to 1024 higher relvancy and faithfulness (according to evaluation)
-service_context = ServiceContext.from_defaults(llm=llm, chunk_size=1024)
+service_context = ServiceContext.from_defaults(llm=Settings.llm, embed_model=Settings.embed_model)
 index_manager = IndexManager(qdrant_client, service_context, collection_name=collecation_name)
 youtube_loader = YouTubeLoader()
 index = index_manager.create_or_load_index(youtube_transcripts=youtube_loader.yttranscripts)
@@ -207,7 +193,7 @@ def reply(message, say, client):
 
                             while try_count < max_attempts:
                                 try:
-                                    commons_agent = ReActAgent.from_tools(query_engine_tools, llm=llm, verbose=True, context=agentContext)
+                                    commons_agent = ReActAgent.from_tools(query_engine_tools, llm=Settings.llm, verbose=True, context=agentContext)
                                     response = commons_agent.chat(query)
 
                                     formatted_response = convert_markdown_links_to_slack(str(response))
