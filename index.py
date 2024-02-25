@@ -1,12 +1,12 @@
-from llama_index import VectorStoreIndex, ServiceContext, StorageContext
+from llama_index import VectorStoreIndex, StorageContext
 from llama_index.vector_stores import QdrantVectorStore
 from qdrant_client.http import models
 
 class IndexManager:
-    def __init__(self, qd_client, llm):
+    def __init__(self, qd_client, service_context):
         self.qd_client = qd_client
         self.collection = "commons"
-        self.service_context = ServiceContext.from_defaults(llm=llm)
+        self.service_context = service_context
 
     def _check_collection_exists(self):
         try:

@@ -8,25 +8,32 @@ To set up the commons-bot app, follow these steps:
 
 1. Clone the GitHub repository to your local machine.
 2. Make sure you have Python installed.
-3. Install the required packages by running the following command:
+3. Install the required packages by running the following command (use pip or poetry):
 
-   ```
-   pip install -r requirements.txt
+   ```shell
+   poetry install 
+
+   # or pip
+   python install -r requirements.txt
    ```
 
 4. Create a `.env` file in the project directory and add the following environment variables:
 
-   ```
+   ```shell
    SLACK_BOT_TOKEN=<your_slack_bot_token>
    SLACK_SIGNING_SECRET=<your_slack_signing_secret>
+   GRAPH_SIGNAL_API_KEY=<key>
+   OPENAI_API_KEY=<key>
+   QD_API_KEY=<api_key>
+   QD_ENDPOINT=<endpoint>
    ```
 
    Make sure to replace `<your_slack_bot_token>` and `<your_slack_signing_secret>` with your own Slack bot token and signing secret. You can obtain these by creating a Slack app in your Slack workspace.
 
 5. Run the following command to start the Flask app:
 
-   ```
-   python app_http_mode.py
+   ```shell
+   python commons-bot.py
    ```
 
    The app will run locally on port 5002.
@@ -43,21 +50,22 @@ When a new member joins the team, the app can handle the `team_join` event. You 
 
 The app can handle incoming message events. You can customize the logic for handling message events in the `handle_message_events` function.
 
-### Onboard Command Handling
+### Command Handling
 
-The app handles the `/onboard` command, allowing users to provide information about their role or interests. This command triggers the `handle_onboard_command` function, which displays a list of roles and interests as buttons. When a user selects a role or interest, the app suggests specific Slack channels based on their selection.
-
-### Role Selection Action Handling
-
-The app handles the selection of a role or interest by users. When a user selects a role or interest button, the app suggests specific Slack channels related to that role. The role selection action is handled in the `handle_role_selection` function.
-
-### Slack Event and Command Endpoints
-
-The app provides the following Flask endpoints to handle Slack events and commands:
-
-- `/slack/events` - Handles Slack events.
-- `/slack/commands` - Handles Slack commands.
+The app handles the `/onboard`, `/commons`, and `/help` commands to handle onboarding as well as question answering from corpus.
 
 ### Slack Interactive Endpoint
 
 The app also provides a Flask endpoint `/slack/interactive` to handle interactive components within Slack. This enables the app to respond to user interactions, such as role selection, and suggest channels accordingly.
+
+## Evaluation
+
+The following are the results of the evaluation, with chunk size `1024` achieving highest average faithfulness and average relevancy.
+
+| Chunk Size | Average Response Time (s) | Average Faithfulness | Average Relevancy |
+|------------|---------------------------|----------------------|-------------------|
+| 128        | 12.33                     | 0.90                 | 0.88              |
+| 256        | 11.35                     | 0.95                 | 0.93              |
+| 512        | 11.56                     | 0.85                 | 0.85              |
+| 1024       | 12.24                     | 0.97                 | 0.95              |
+| 2048       | 11.74                     | 0.93                 | 0.90              |

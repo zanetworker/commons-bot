@@ -7,6 +7,7 @@ import datetime, uuid
 from pathlib import Path
 import nest_asyncio
 
+from llama_index import ServiceContext
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 
@@ -22,7 +23,7 @@ from llama_index.agent import ReActAgent
 from llama_index.llms import OpenAI
 
 
-import graphsignal
+# import graphsignal
 
 graphsignal.configure(api_key=os.environ['GRAPH_SIGNAL_API_KEY'], deployment='commons-bot')
 
@@ -62,7 +63,7 @@ qdrant_client = qdrant_manager.client
 # Assuming 'client' is your initialized Qdrant client and 'youtube_transcripts' is your data
 llm = OpenAI(model="gpt-4", temperature=0.0, stop_symbols=["\n"])
 
-index_manager = IndexManager(qdrant_client, llm=llm)
+index_manager = IndexManager(qdrant_client, ServiceContext.from_defaults(llm=llm))
 youtube_loader = YouTubeLoader()
 index = index_manager.create_or_load_index(youtube_transcripts=youtube_loader.yttranscripts)
 
