@@ -50,8 +50,7 @@ qdrant_client = qdrant_manager.client
 # set chunk_size to 1024 higher relvancy and faithfulness (according to evaluation)
 service_context = ServiceContext.from_defaults(llm=Settings.llm, embed_model=Settings.embed_model)
 index_manager = IndexManager(qdrant_client, service_context, collection_name=collecation_name)
-youtube_loader = YouTubeLoader()
-index = index_manager.create_or_load_index(youtube_transcripts=youtube_loader.yttranscripts)
+index = index_manager.create_or_load_index()
 
 query_engine_manager = QueryEngineManager(index)
 agentContext = query_engine_manager.get_agent_context()
@@ -193,6 +192,7 @@ def reply(message, say, client):
 
                             while try_count < max_attempts:
                                 try:
+                                    # formatted_response = "I'm sorry, something went wrong. Please try again later. Checkout the OpenShift commons website: https://commons.openshift.org/ for more information"
                                     commons_agent = ReActAgent.from_tools(query_engine_tools, llm=Settings.llm, verbose=True, context=agentContext)
                                     response = commons_agent.chat(query)
 

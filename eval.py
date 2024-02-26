@@ -2,7 +2,7 @@ import time
 
 from llama_index.llms.openai import OpenAI
 from llama_index.core import ServiceContext 
-from llama_index.evaluation import FaithfulnessEvaluator, RelevancyEvaluator,  DatasetGenerator
+from llama_index.core.evaluation import FaithfulnessEvaluator, RelevancyEvaluator,  DatasetGenerator
 
 from index import IndexManager
 from loaders import YouTubeLoader, QdrantClientManager, EnvironmentConfig
@@ -58,8 +58,7 @@ class ResponseEvaluator:
 
 
         index_manager = IndexManager(qdrant_client, self.service_context)
-        youtube_loader = YouTubeLoader()
-        index = index_manager.create_or_load_index(youtube_transcripts=youtube_loader.yttranscripts)
+        index = index_manager.create_or_load_index()
 
         query_engine_manager = QueryEngineManager(index)
         

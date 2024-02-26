@@ -4,6 +4,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from llama_index.core.tools.tool_spec.base import BaseToolSpec
 import feedparser
+from memory_profiler import profile
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -13,6 +14,9 @@ class SlackToolSpec(BaseToolSpec):
     """Slack tool spec."""
     spec_functions = ["get_channel_history_by_query"]
 
+    __slots__ = ['client']
+
+    # @profile
     def __init__(self, client: WebClient):
         self.client = client
 
@@ -60,7 +64,8 @@ class FeedSpec(BaseToolSpec):
     """News fetcher specification."""
     spec_functions = ["fetch_news"]
 
-
+    __slots__ = ['feed_urls']
+    # @profile
     def __init__(self):
         self.feed_urls = [
         "https://www.cncf.io/rss",

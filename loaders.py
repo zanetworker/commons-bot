@@ -8,6 +8,8 @@ from memory_profiler import profile
 load_dotenv()
 
 class EnvironmentConfig:
+    # __slots__ = ['qd_endpoint', 'qd_api_key', 'slack_bot_token', 'slack_signing_secret', 'graph_signal_api_key']
+
     # @profile
     def __init__(self):
         self.load_env()
@@ -35,6 +37,9 @@ class EnvironmentConfig:
         
     
 class QdrantClientManager:
+    # add __slots 
+    # __slots__ = ['config', '_client', '_collection_name'] 
+
     # @profile
     def __init__(self, config, collection_name):
         self.config = config
@@ -60,29 +65,11 @@ class QdrantClientManager:
 
 
 class YouTubeLoader:
+    # __slots__ = ['file_path', '_ytlinks', '_yttranscripts']
+
     # @profile
     def __init__(self):
-        # self.file_path = file_path
-        self._ytlinks = None
-        self._yttranscripts = None
-
-    def _load_youtube_links(self):
-        with open(self.file_path, 'r') as file:
-            ytlinks = file.readlines()
-        return ytlinks
-
-    def _load_youtube_transcripts(self, ytlinks):
-        loader = YoutubeTranscriptReader()
-        return loader.load_data(ytlinks=ytlinks)
-
-    # define property for ytlinks
-    @property
-    def ytlinks(self):
-        if self._ytlinks is None:
-            try: 
-                self._ytlinks = self._load_youtube_links()
-            except Exception as e:
-                self._ytlinks =  ytlinks = [
+        self._ytlinks = [
                 'https://youtu.be/ZxvbQbT_wkc?feature=shared',   
                 'https://www.youtube.com/watch?v=RzxzY1dluvo',
                 'https://www.youtube.com/watch?v=ZTsgcnxQyw4',
@@ -212,13 +199,24 @@ class YouTubeLoader:
                 'https://www.youtube.com/watch?v=DhpDqa7oxzI',
                 'https://www.youtube.com/watch?v=fnH60GhaZ1w',
                 'https://www.youtube.com/watch?v=5cueeNm667U',
-            ]
-        return self._ytlinks
-    
+            # Add more links here...
+        ]
+        self._yttranscripts = {}
+
+
+    def _load_youtube_transcripts(self):
+        loader = YoutubeTranscriptReader()
+        return loader.load_data(ytlinks=self._ytlinks)
+
+    # # define property for ytlinks
+    # @property
+    # def ytlinks(self):
+    #     return self._ytlinks
+
     # define property for yttranscripts
     @property
     def yttranscripts(self):
-        if self._yttranscripts is None:
-            self._yttranscripts = self._load_youtube_transcripts(self.ytlinks)
+        if not self._yttranscripts:
+            self._yttranscripts = self._load_youtube_transcripts()
         return self._yttranscripts
-    
+
