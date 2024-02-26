@@ -1,27 +1,35 @@
-FROM python:3.11-slim-bullseye
+# Builder stage
+FROM python:3.11-slim-bullseye as builder
 
-# Set the working directory in the container to /app
 WORKDIR /app
 
+# Install poetry in the build stage
 RUN pip install --no-cache-dir poetry==1.6.1
 
-# Copy only the pyproject.toml and optionally poetry.lock files to use Docker caching
+# Copy the pyproject.toml and poetry.lock files to install dependencies
 COPY pyproject.toml poetry.lock* ./
 
-# Set Poetry to not create a virtual environment and install dependencies
-# Disabling virtualenv creation for Docker builds is a best practice
+# Install dependencies without creating a virtual environment
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi
-    
-# Copy the current directory contents into the container at /app
-# This is done after installing dependencies to ensure that Docker's cache is used efficiently
+
+# Copy the source code
 COPY . .
 
-EXPOSE 5002
+
+# Final stage
+FROM python:3.11-slim-bullseye
+
+WORKDIR /app
+
+# Copy the installed packages from the builder stage
+COPY --from=builder /app /app
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+
+EXPOSE 10000
 
 CMD ["python", "commons-bot.py"]
 
-# Set a non-root user and switch to it for security best practices
-# Here 'user' should be replaced with the actual username you want to use.
+# Uncomment the following lines to set a non-root user, replacing 'user' with your chosen username
 # RUN adduser --disabled-password --gecos '' user
 # USER user
