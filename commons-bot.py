@@ -23,7 +23,9 @@ from llama_index.llms.openai import OpenAI
 from llama_index.embeddings.openai import OpenAIEmbedding
 
 
-Settings.llm = OpenAI(model="gpt-4")
+Settings.llm = OpenAI(model="gpt-4", temperature=0.0, stop_symbols=["\n"])
+# set llm as gpt-3.5-turbo for faster response time
+# change to gpt-4-turn
 Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 # Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=20)
 # Settings.num_output = 512
@@ -183,7 +185,7 @@ def reply(message, say, client):
                                 channel=channel_id,
                                 user=user_id,
                                 text="Thinking... :thinking_face:",  # Send the response text
-                                thread_ts=thread_ts  # Include this to respond in the thread if the original message was part of one
+                                thread_ts=thread_ts or message['ts']
                             )
 
                 
@@ -204,7 +206,7 @@ def reply(message, say, client):
                                     client.chat_postMessage(
                                         channel=channel_id,
                                         text=str(formatted_response),
-                                        thread_ts=thread_ts  # Include this to respond in the thread if the original message was part of one
+                                        thread_ts=thread_ts or message['ts']
                                     )
                                     
                                     break  # Exit the loop if successful
@@ -219,7 +221,7 @@ def reply(message, say, client):
                                 client.chat_postMessage(
                                     channel=channel_id,
                                     text=str(formatted_response),
-                                    thread_ts=thread_ts  # Include this to respond in the thread if the original message was part of one
+                                    thread_ts=thread_ts or message['ts']
                                 )
                             return
 
@@ -280,13 +282,13 @@ def handle_help_command(ack, body, client):
     help_message = """
 *Here are the commands you can use with this Slack bot:*
 
-- `/onboard`: Get started with the bot and set up your profile.
-- `/help`: Show this help message.
-- `/commons`: Ask a question to the bot about OpenShift Commons.
+* `/onboard`: Get started with the bot and set up your profile.
+* `/help`: Show this help message.
+* `/commons`: Ask a question to the bot about OpenShift Commons.
 
 *Interactions:*
-- Select your role from the buttons provided to get personalized channel recommendations.
-- To ask questions and receive video recommendations, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" The bot will then search through OpenShift Commons videos and transcripts to provide you with relevant video links.
+* Select your role from the buttons provided to get personalized channel recommendations.
+* To ask questions and receive video recommendations, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" The bot will then search through OpenShift Commons videos and transcripts to provide you with relevant video links.
 
 If you have any questions or need further assistance, feel free to ask here!
     """
@@ -377,7 +379,7 @@ def slack_interactive():
 
 - `/help`: Show this help message.
 - `/commons`: Ask a question to the bot about OpenShift Commons that is only visible to you.
-- Ask questions and receive recommendation, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" 
+-  Ask questions and receive recommendations, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" 
 The bot will then search through it's knowledge to provide you with relevant information.
 
 If you have any questions or need further assistance, feel free to ask here! Also make sure to check https://commons.openshift.org/ for more information.
