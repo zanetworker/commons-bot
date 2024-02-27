@@ -4,6 +4,8 @@ import os
 import sys
 from nest_asyncio import apply
 from graphsignal import configure
+import threading
+
 
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
@@ -23,7 +25,7 @@ from llama_index.llms.openai import OpenAI
 from llama_index.embeddings.openai import OpenAIEmbedding
 
 
-Settings.llm = OpenAI(model="gpt-4", temperature=0.0, stop_symbols=["\n"])
+Settings.llm = OpenAI(model="gpt-4", temperature=0.5, stop_symbols=["\n"])
 # set llm as gpt-3.5-turbo for faster response time
 # change to gpt-4-turn
 Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
@@ -166,7 +168,8 @@ def reply(message, say, client):
     channel_id = message['channel']  # Extract the channel ID from the message
     blocks = message.get('blocks')
     thread_ts = message.get('thread_ts', None)  # Default to None if thread_ts isn't present
-    print(blocks)
+    # print(blocks)
+    # print("handling message")
 
     if blocks:
         for block in blocks:
@@ -181,20 +184,29 @@ def reply(message, say, client):
                             query = element.get('text')
                             print(f"Somebody asked the bot: {query}")
 
+
                             client.chat_postEphemeral(
                                 channel=channel_id,
                                 user=user_id,
-                                text="Thinking... :thinking_face:",  # Send the response text
-                                thread_ts=thread_ts or message['ts']
+                                text="Got your message, working on it! :hourglass_flowing_sand:",  # Send the response text
+                                thread_ts=thread_ts
                             )
-
-                
                             try_count = 0
                             max_attempts = 5
+                            # process request
+                            
+                            try_count = 0
 
                             while try_count < max_attempts:
                                 try:
-                                    # formatted_response = "I'm sorry, something went wrong. Please try again later. Checkout the OpenShift commons website: https://commons.openshift.org/ for more information"
+                                    # add reaction only once
+                                    if try_count == 0: 
+                                        client.reactions_add(
+                                            name="hourglass_flowing_sand",
+                                            channel=channel_id,
+                                            timestamp=message['ts']
+                                        )
+
                                     commons_agent = ReActAgent.from_tools(query_engine_tools, llm=Settings.llm, verbose=True, context=agentContext)
                                     response = commons_agent.chat(query)
 
@@ -209,6 +221,7 @@ def reply(message, say, client):
                                         thread_ts=thread_ts or message['ts']
                                     )
                                     
+
                                     break  # Exit the loop if successful
                                     
                                 except Exception as e:
@@ -216,15 +229,25 @@ def reply(message, say, client):
                                     try_count += 1
 
                             if try_count == max_attempts:
-                                formatted_response = "I'm sorry, something went wrong. Please try again later. Checkout the OpenShift commons website: https://commons.openshift.org/ for more information"
-                                
+                                formatted_response = "I'm sorry, something went wrong. Please try again later. In the mean time, checkout the OpenShift commons website: https://commons.openshift.org/ for more information"
+                            
                                 client.chat_postMessage(
                                     channel=channel_id,
                                     text=str(formatted_response),
                                     thread_ts=thread_ts or message['ts']
                                 )
-                            return
-
+                                
+                            # remove reaction                                     
+                            client.reactions_remove(
+                                name="hourglass_flowing_sand",
+                                channel=channel_id,
+                                timestamp=message['ts']
+                            )
+                            client.reactions_add(
+                                name="white_check_mark",
+                                channel=channel_id,
+                                timestamp=message['ts']
+                            )
     # dt_object = datetime.datetime.fromtimestamp(float(message.get('ts')))
     # formatted_time = dt_object.strftime('%Y-%m-%d %H:%M:%S')
     # # otherwise do something else with it
