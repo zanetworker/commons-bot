@@ -8,12 +8,9 @@ To set up the commons-bot app, follow these steps:
 
 1. Clone the GitHub repository to your local machine.
 2. Make sure you have Python installed.
-3. Install the required packages by running the following command (use pip or poetry):
+3. Install the required packages by running the following command (using `poetry`):
 
    ```shell
-   pip install -r requirements.txt
-
-   # or poetry
    poetry install 
    ```
 

@@ -5,7 +5,7 @@ from llama_index.postprocessor.colbert_rerank.base import ColbertRerank
 from llama_index.core import PromptTemplate
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 
-from tool_specs import SlackToolSpec, FeedSpec
+from tool_specs import SlackToolSpec, FeedSpec, YoutubeSpec
 from memory_profiler import profile
 
 
@@ -53,6 +53,7 @@ class QueryEngineManager:
                 "For Lists, use unordered lists. \n"
                 "Make sure the URLs are correct and well formatted. \n"
                 "If you don't have the URL, provide a link to a video that you think is VERY relevant to the query. \n"
+                "Make sure the link you share and it's title match, don't send wrong links. \n"
             )
         }
     #     self._agent_context = (
@@ -77,12 +78,36 @@ class QueryEngineManager:
             "You will give multiple links from the context and corpus you were provided, make sure the links are well formatted. "
             "If you don't have the URL, provide a link to a video that you think is VERY relevant to the query. "
             "Make sure the link you share and it's title match, don't send wrong links. "
+            "You MUST use the yotube_link_checker_tool which takes a url as input, to check if the youtube link you have is functional."
+            "You MUST use the yotube_link_checker_tool to check if the title of the youtube link matches the query."
+            "AVOID answering without using tools."
+            "DONT send a url if you don't find a link for it in corpus."
+            "Always use the yotube_link_checker_tool if you reply with urls or links."
             "Make sure to add relevant context and mention how you got the information."
             "if you don't find a link, provide a link to a video that you think is VERY relevant to the query."
             "Use slack_tools to search for similar questions and provide the best answer."
             "Use feed_tools to fetch news and updates about OpenShift, Kubernetes and cloud-native technologies."
             "Make sure the response is formated nicely to be read on slack especially for lists."
             "Make sure to use single asterisk (*) for bold text don't use (**)."
+            "Use information from all tools available to you, make sure to prioritize youtube links and transcripts."
+            "If you send a video or a link, mention that this video is relevant but don't describe it as the best."
+            "Make sure to check validity of youtube url before you send it."
+        )
+
+        # TODO assume the response from the query transcripts and complement it with external tools, like slack messages, news,... (i.e., be picky on agent tools used).
+        self._agent_context_commands = (
+            "Building on our previous exploration of OpenShift and cloud-native technologies, where we covered [key points from the previous query], "
+            "we now aim to delve deeper into [specific areas for further exploration]. "
+            "This follow-up will integrate insights from Slack community discussions and the latest news articles to enrich our understanding. "
+            "Our focus will be on [specific questions or topics for the follow-up query], leveraging slack_tools for community insights "
+            "and feed_tools for the latest industry developments. "
+            "The objective is to synthesize this information to enhance our technical knowledge and stay informed about innovations "
+            "and community-led solutions in the OpenShift and cloud-native landscape. "
+            "Use passive voice in the reply, and ensure the response is well-structured and easy to read."
+            "Don't provide duplicate information, and ensure the response is relevant to the query. "
+            "If you have nothing to add, say all relevant information has been provided."
+            # "Ensure all shared YouTube links are verified for relevance and functionality using the youtube_link_checker_tool, "
+            # "and provide context for their selection to ensure they complement the discussion effectively."
         )
 
 
@@ -97,7 +122,10 @@ class QueryEngineManager:
 
     def get_agent_context(self):
         return self._agent_context
-    
+
+    def get_agent_commands_context(self):
+        return self._agent_context_commands
+
     def create_query_engine(self, similarity_top_k=5, streaming=True, chat=False, rerank=False):
         if rerank:
             colbert_reranker = ColbertRerank(
@@ -123,6 +151,7 @@ class QueryEngineToolsManager:
         self._slack_tool_spec = SlackToolSpec(client=WebClient(token=os.environ["SLACK_BOT_TOKEN"]))
         self._feed_tool_spec = FeedSpec()
         self._query_engine = query_engine
+        self._youtube_tool_spec = YoutubeSpec()
 
     @property
     def slack_tool(self):
@@ -133,7 +162,11 @@ class QueryEngineToolsManager:
         return self._feed_tool_spec.to_tool_list()
 
     @property
-    def query_engine_tools(self):
+    def yotube_link_checker_tool(self):
+        return self._youtube_tool_spec.to_tool_list()
+
+    @property
+    def query_engine_agent_tools(self):
         # Assuming metadata and other necessary configurations for the query engine tools are set correctly
         youtube_transcripts_tool = QueryEngineTool(
             query_engine=self._query_engine,
@@ -142,4 +175,9 @@ class QueryEngineToolsManager:
                 description="Transcripts for OpenShift commons videos. Each transcript is for a video that talks about a certain topic.",
             ),
         )
-        return [*self.slack_tool, *self.feed_tool, youtube_transcripts_tool]
+        return [*self.slack_tool, *self.feed_tool, *self.yotube_link_checker_tool, youtube_transcripts_tool]
+
+    @property
+    def query_engine_command_tools(self):
+        # Assuming metadata and other necessary configurations for the query engine tools are set correctly
+        return [*self.slack_tool, *self.feed_tool]

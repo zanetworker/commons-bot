@@ -1,8 +1,5 @@
 import os
 from dotenv import load_dotenv
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams
-from llama_index.readers.youtube_transcript import YoutubeTranscriptReader
 from memory_profiler import profile
 
 load_dotenv()
@@ -37,6 +34,7 @@ class EnvironmentConfig:
         
     
 class QdrantClientManager:
+
     # add __slots 
     # __slots__ = ['config', '_client', '_collection_name'] 
 
@@ -49,6 +47,9 @@ class QdrantClientManager:
 
     @property
     def client(self):
+        from qdrant_client import QdrantClient
+        from qdrant_client.http.models import Distance, VectorParams
+
         if self._client is None:
             if self.config.qd_endpoint and self.config.qd_api_key:
                 self._client = QdrantClient(url=self.config.qd_endpoint, api_key=self.config.qd_api_key)
@@ -73,7 +74,7 @@ class YouTubeLoader:
                 'https://youtu.be/ZxvbQbT_wkc?feature=shared',   
                 'https://www.youtube.com/watch?v=RzxzY1dluvo',
                 'https://www.youtube.com/watch?v=ZTsgcnxQyw4',
-                'https://www.youtube.com/watch?v=m-p7jmXoQdk', 
+                'https://www.youtube.com/watch?v=m-p7jmXoQdk',
                 'https://www.youtube.com/watch?v=6PZfKufNisM',
                 'https://www.youtube.com/watch?v=-Ma4FBOtdbo',
                 'https://www.youtube.com/watch?v=eEwQeLns_hU',
@@ -99,7 +100,7 @@ class YouTubeLoader:
                 'https://www.youtube.com/watch?v=pKEi_o2mA40',
                 'https://www.youtube.com/watch?v=qNgtxU5XOrg',
                 'https://www.youtube.com/watch?v=aVq69JzC6jM',
-                'https://www.youtube.com/watch?v=_3IfYLb_bbE', 
+                'https://www.youtube.com/watch?v=_3IfYLb_bbE',
                 'https://www.youtube.com/watch?v=3vjOCOLXExQ',
                 'https://www.youtube.com/watch?v=zcO2qR2dbdo',
                 'https://www.youtube.com/watch?v=RCwcEZtba4E',
@@ -205,6 +206,8 @@ class YouTubeLoader:
 
 
     def _load_youtube_transcripts(self):
+        from llama_index.readers.youtube_transcript import YoutubeTranscriptReader
+
         loader = YoutubeTranscriptReader()
         return loader.load_data(ytlinks=self._ytlinks)
 
@@ -216,7 +219,15 @@ class YouTubeLoader:
     # define property for yttranscripts
     @property
     def yttranscripts(self):
+        from deepmultilingualpunctuation import PunctuationModel
+
         if not self._yttranscripts:
             self._yttranscripts = self._load_youtube_transcripts()
+
+            model = PunctuationModel()
+            # punctuation restoration for youtube transcripts using deepmultilingualpunctuation
+            for transcript in self._yttranscripts:
+                transcript.text = model.restore_punctuation(transcript.text)
+
         return self._yttranscripts
 

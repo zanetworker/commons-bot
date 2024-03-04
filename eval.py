@@ -67,7 +67,7 @@ class ResponseEvaluator:
 
         agentContext = query_engine_manager.get_agent_context()
         query_engine_tools_manager = QueryEngineToolsManager(query_engine)
-        query_engine_tools = query_engine_tools_manager.query_engine_tools
+        query_engine_tools = query_engine_tools_manager.query_engine_agent_tools
 
 
         num_questions = len(eval_questions)

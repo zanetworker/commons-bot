@@ -1,9 +1,8 @@
 import logging
 from typing import List
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
 from llama_index.core.tools.tool_spec.base import BaseToolSpec
-import feedparser
+from slack_sdk.errors import SlackApiError
+
 from memory_profiler import profile
 
 from dotenv import load_dotenv
@@ -11,6 +10,8 @@ load_dotenv()
 
 
 class SlackToolSpec(BaseToolSpec):
+    from slack_sdk import WebClient
+
     """Slack tool spec."""
     spec_functions = ["get_channel_history_by_query"]
 
@@ -48,7 +49,11 @@ class SlackToolSpec(BaseToolSpec):
                 
     def get_channel_history_by_query(self, query: str, limit: int = 100) -> List[dict]:
         """Fetches channel history and filters messages by a search query."""
-        messages = self.get_channel_history("C0FNVPMNF", limit)
+
+        # fixed to general channel for now
+        # TODO - make this more dynamic
+        _general_channel = "C0FNVPMNF"
+        messages = self.get_channel_history(_general_channel, limit)
         query_related_messages = []
 
         for message in messages:
@@ -58,6 +63,24 @@ class SlackToolSpec(BaseToolSpec):
 
         return query_related_messages
 
+
+# build a spec to check if youtube url is functional
+class YoutubeSpec(BaseToolSpec):
+    """Youtube tool spec."""
+    spec_functions = ["check_youtube_url"]
+
+    def check_youtube_url(self, url) -> str:
+        """Check if the youtube url is functional."""
+        from pytube import YouTube
+        valid_yt_links = []
+        try:
+            yt = YouTube(url)
+            yt.check_availability()
+            return "Valid youtube link"
+        except Exception as e:
+            print(f"Error checking youtube link {url}: {e}")
+            # return exception message
+            return str(e)
 
 
 class FeedSpec(BaseToolSpec):
@@ -75,6 +98,8 @@ class FeedSpec(BaseToolSpec):
     ]
 
     def fetch_news(self) -> str:
+        import feedparser
+
         """Fetch news items from specified feeds."""
         print("Fetching news...")
         formatted_news_list = []
