@@ -88,7 +88,6 @@ query_engine_transcripts = query_engine_manager.create_query_engine()
 agent_context = query_engine_manager.get_agent_context()
 agent_commands_context = query_engine_manager.get_agent_commands_context()
 
-
 query_engine_tools_manager = QueryEngineToolsManager(query_engine_transcripts)
 query_engine_agent_tools = query_engine_tools_manager.query_engine_agent_tools
 query_engine_agent_commands_tools = query_engine_tools_manager.query_engine_command_tools
@@ -169,8 +168,9 @@ def handle_commons_command(ack, say, command, client):
             response_transcripts = query_engine_transcripts.query(query)
             formatted_transcripts_response = convert_markdown_links_to_slack(str(response_transcripts))
 
-            client.chat_postMessage(
+            client.chat_postEphemeral(
                 channel=command_channel_id,
+                user=user_id,
                 text=formatted_transcripts_response
             )
             query_engine_response = formatted_transcripts_response
@@ -196,14 +196,16 @@ def handle_commons_command(ack, say, command, client):
     try_count = 0
     while try_count < max_attempts:
         try:
-            commons_agent = ReActAgent.from_tools(query_engine_agent_commands_tools, llm=Settings.llm, verbose=True, context=agent_commands_context)
+            commons_agent = ReActAgent.from_tools(query_engine_agent_commands_tools, llm=Settings.llm, verbose=True,
+                                                  context=agent_commands_context)
 
             # use the response from the transcripts query engine to amplify the agent response
             response_agent = commons_agent.chat(query_engine_response)
             formatted_agent_response = convert_markdown_links_to_slack(str(response_agent))
 
-            client.chat_postMessage(
+            client.chat_postEphemeral(
                 channel=command_channel_id,
+                user=user_id,
                 text=formatted_agent_response
             )
             break  # Exit the loop if successful
@@ -255,7 +257,6 @@ def reply(message, say, client):
                                 thread_ts=thread_ts
                             )
 
-
                             max_attempts = 5
 
                             # Query and send the transcripts response with retry mechanism
@@ -294,7 +295,8 @@ def reply(message, say, client):
                             try_count = 0
                             while try_count < max_attempts:
                                 try:
-                                    commons_agent = ReActAgent.from_tools(query_engine_agent_commands_tools, llm=Settings.llm,
+                                    commons_agent = ReActAgent.from_tools(query_engine_agent_commands_tools,
+                                                                          llm=Settings.llm,
                                                                           verbose=True, context=agent_commands_context)
                                     response_agent = commons_agent.chat(query)
                                     formatted_response = convert_markdown_links_to_slack(str(response_agent))
@@ -329,8 +331,6 @@ def reply(message, say, client):
                                 channel=reply_channel_id,
                                 timestamp=message['ts']
                             )
-
-
 
                             client.reactions_add(
                                 name="white_check_mark",
