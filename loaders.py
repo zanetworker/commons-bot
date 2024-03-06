@@ -70,6 +70,7 @@ class YouTubeLoader:
 
     # @profile
     def __init__(self):
+        # TODO - add file path and put video content in there instead of using a
         self._ytlinks = [
                 'https://youtu.be/ZxvbQbT_wkc?feature=shared',   
                 'https://www.youtube.com/watch?v=RzxzY1dluvo',

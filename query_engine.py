@@ -52,8 +52,11 @@ class QueryEngineManager:
                 "Make sure the response is formatted nicely to be read on slack especially for lists. \n"
                 "For Lists, use unordered lists. \n"
                 "Make sure the URLs are correct and well formatted. \n"
-                "If you don't have the URL, provide a link to a video that you think is VERY relevant to the query. \n"
                 "Make sure the link you share and it's title match, don't send wrong links. \n"
+                "Use information from all tools available to you, make sure to prioritize youtube links and transcripts."
+                "If you send a video or a link, mention that this video is relevant but don't describe it as the best."
+                "Make sure to check validity of youtube url before you send it."
+                "DONT send a url if you don't find a link for it in corpus."
             )
         }
     #     self._agent_context = (
