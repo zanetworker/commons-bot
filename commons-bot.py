@@ -30,8 +30,8 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 
 from graphsignal import configure
 
-# Settings.llm = OpenAI(model="gpt-4", temperature=0.1, stop_symbols=["\n"])
-Settings.llm = OpenAI(model="gpt-4-turbo-preview", temperature=0.1, stop_symbols=["\n"])
+Settings.llm = OpenAI(model="gpt-4", temperature=0.1, stop_symbols=["\n"])
+# Settings.llm = OpenAI(model="gpt-4-turbo-preview", temperature=0.1, stop_symbols=["\n"])
 # set llm as gpt-3.5-turbo for faster response time
 # change to gpt-4-turn
 Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
