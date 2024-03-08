@@ -30,8 +30,10 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 
 from graphsignal import configure
 
-Settings.llm = OpenAI(model="gpt-4", temperature=0.1, stop_symbols=["\n"])
+# Settings.llm = OpenAI(model="gpt-4", temperature=0.1, stop_symbols=["\n"])
 # Settings.llm = OpenAI(model="gpt-4-turbo-preview", temperature=0.1, stop_symbols=["\n"])
+# change to gpt-4-1106-preview
+Settings.llm = OpenAI(model="gpt-4-1106-preview", temperature=0.1, stop_symbols=["\n"])
 # set llm as gpt-3.5-turbo for faster response time
 # change to gpt-4-turn
 Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
@@ -80,7 +82,7 @@ index = index_manager.create_or_load_index()
 
 ## testing stuff
 # index_manager.splitter(documents=YouTubeLoader().yttranscripts)
-# index_manager.retriever(index)
+index_manager.retriever(index)
 ## end of testing 
 
 query_engine_manager = QueryEngineManager(index)
