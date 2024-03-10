@@ -5,7 +5,7 @@ from llama_index.postprocessor.colbert_rerank.base import ColbertRerank
 from llama_index.core import PromptTemplate
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 
-from tool_specs import SlackToolSpec, FeedSpec, YoutubeSpec
+from tool_specs import SlackToolSpec, FeedSpec, YoutubeSpec, BingSearchToolSpec
 from memory_profiler import profile
 
 
@@ -53,10 +53,12 @@ class QueryEngineManager:
                 "For Lists, use unordered lists. \n"
                 "Make sure the URLs are correct and well formatted. \n"
                 "Make sure the link you share and it's title match, don't send wrong links. \n"
-                "Use information from all tools available to you, make sure to prioritize youtube links and transcripts."
-                "If you send a video or a link, mention that this video is relevant but don't describe it as the best."
-                "Make sure to check validity of youtube url before you send it."
-                "DONT send a url if you don't find a link for it in corpus."
+                "Use information from all tools available to you, make sure to prioritize youtube links and transcripts. \n"
+                "If you send a video or a link, mention that this video is relevant but don't describe it as the best. \n"
+                "Make sure to check validity of youtube url before you send it. \n"
+                "DONT send a url if you don't find a link for it in corpus. \n"
+                "Make sure to use single asterisk (*) for bold text don't use (**). \n"
+                "Use proper slack formatting for the response. \n"
             )
         }
     #     self._agent_context = (
@@ -95,6 +97,9 @@ class QueryEngineManager:
             "Use information from all tools available to you, make sure to prioritize youtube links and transcripts."
             "If you send a video or a link, mention that this video is relevant but don't describe it as the best."
             "Make sure to check validity of youtube url before you send it."
+            "Make sure to use single asterisk (*) for bold text don't use (**)."
+            "ALWAYS Include the sources of the information you provide."
+
         )
 
         # TODO assume the response from the query transcripts and complement it with external tools, like slack messages, news,... (i.e., be picky on agent tools used).
@@ -104,15 +109,17 @@ class QueryEngineManager:
             "This follow-up will integrate insights from Slack community discussions and the latest news articles to enrich our understanding. "
             "Our focus will be on [specific questions or topics for the follow-up query], leveraging slack_tools for community insights "
             "and feed_tools for the latest industry developments. "
+            "and bing_search for complimenting with more information, also make sure to use the links provided by bing_search. "
             "The objective is to synthesize this information to enhance our technical knowledge and stay informed about innovations "
             "and community-led solutions in the OpenShift and cloud-native landscape. "
             "Use passive voice in the reply, and ensure the response is well-structured and easy to read."
             "Don't provide duplicate information, and ensure the response is relevant to the query. "
-            "If you have nothing to add, say all relevant information has been provided."
+            "If you have nothing to add, say all relevant information has been provided. "
+            "Make sure to use single asterisk (*) for bold text don't use (**). "
+            "ALWAYS Include the sources of the information you provide. "
             # "Ensure all shared YouTube links are verified for relevance and functionality using the youtube_link_checker_tool, "
             # "and provide context for their selection to ensure they complement the discussion effectively."
         )
-
 
     def _update_prompts(self, query_engine):
         # Assuming 'transcripts' is the key for the transcripts template
@@ -155,6 +162,7 @@ class QueryEngineToolsManager:
         self._feed_tool_spec = FeedSpec()
         self._query_engine = query_engine
         self._youtube_tool_spec = YoutubeSpec()
+        self._bing_search_tool_spec = BingSearchToolSpec(api_key=os.environ["BING_SEARCH_API_KEY"])
 
     @property
     def slack_tool(self):
@@ -167,6 +175,10 @@ class QueryEngineToolsManager:
     @property
     def yotube_link_checker_tool(self):
         return self._youtube_tool_spec.to_tool_list()
+
+    @property
+    def bing_search(self):
+        return self._bing_search_tool_spec.to_tool_list()
 
     @property
     def query_engine_agent_tools(self):
@@ -183,4 +195,4 @@ class QueryEngineToolsManager:
     @property
     def query_engine_command_tools(self):
         # Assuming metadata and other necessary configurations for the query engine tools are set correctly
-        return [*self.slack_tool, *self.feed_tool]
+        return [*self.slack_tool, *self.feed_tool, *self.bing_search]

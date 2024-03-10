@@ -3,18 +3,14 @@ import logging
 import os
 import sys
 from nest_asyncio import apply
-import threading
-
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 
-from slack_bolt import App
-from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_sdk import WebClient, WebhookClient
+import slack
 
-from utils import convert_markdown_links_to_slack
 from index import IndexManager
-from loaders import QdrantClientManager, EnvironmentConfig, YouTubeLoader
+from loaders import QdrantClientManager, EnvironmentConfig
 from query_engine import QueryEngineManager, QueryEngineToolsManager
 
 from llama_index.core import Settings, ServiceContext
@@ -26,14 +22,24 @@ from llama_index.core.node_parser import (
 
 from llama_index.core.agent.react import ReActAgent
 from llama_index.llms.openai import OpenAI
+from llama_index.llms.ollama import Ollama
+
 from llama_index.embeddings.openai import OpenAIEmbedding
 
 from graphsignal import configure
+
+from slack_bolt import App
+from slack_bolt.adapter.flask import SlackRequestHandler
+import threading
+import os
+from utils import convert_markdown_links_to_slack
 
 # Settings.llm = OpenAI(model="gpt-4", temperature=0.1, stop_symbols=["\n"])
 # Settings.llm = OpenAI(model="gpt-4-turbo-preview", temperature=0.1, stop_symbols=["\n"])
 # change to gpt-4-1106-preview
 Settings.llm = OpenAI(model="gpt-4-1106-preview", temperature=0.1, stop_symbols=["\n"])
+# Settings.llm = Ollama(model="llama2", request_timeout=240.0)
+
 # set llm as gpt-3.5-turbo for faster response time
 # change to gpt-4-turn
 Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
@@ -82,7 +88,7 @@ index = index_manager.create_or_load_index()
 
 ## testing stuff
 # index_manager.splitter(documents=YouTubeLoader().yttranscripts)
-index_manager.retriever(index)
+# index_manager.retriever(index)
 ## end of testing 
 
 query_engine_manager = QueryEngineManager(index)
@@ -95,266 +101,45 @@ query_engine_tools_manager = QueryEngineToolsManager(query_engine_transcripts)
 query_engine_agent_tools = query_engine_tools_manager.query_engine_agent_tools
 query_engine_agent_commands_tools = query_engine_tools_manager.query_engine_command_tools
 
+# Flask app to handle requests
+flask_app: Flask = Flask(__name__)
+
 # Initializes your app with your bot token and signing secret
 slack_app = App(
     token=os.environ["SLACK_BOT_TOKEN"],
     signing_secret=os.environ["SLACK_SIGNING_SECRET"]
 )
 
-# Flask app to handle requests
-flask_app = Flask(__name__)
+# only enable to join specific channels
+# channel_list = slack_app.client.conversations_list().data
+# channel = next((channel for channel in channel_list.get('channels') if channel.get("name") == "test-bot"), None)
+# channel_id = channel.get('id')
+# slack_app.client.conversations_join(channel=channel_id)
+
+
 handler = SlackRequestHandler(slack_app)
 
-channel_list = slack_app.client.conversations_list().data
-channel = next((channel for channel in channel_list.get('channels') if channel.get("name") == "test-bot"), None)
-channel_id = channel.get('id')
-slack_app.client.conversations_join(channel=channel_id)
+slack_ops = slack.SlackOperations(slack_app)
+message_handler = slack.MessageHandler(slack_ops, query_engine_transcripts, query_engine_agent_commands_tools,
+                                       agent_commands_context)
 
+# Initialize Command Handlers with Slack Operations
+cmd_handler = slack.CommandHandler(slack_ops, query_engine_transcripts, query_engine_agent_commands_tools,
+                                   agent_commands_context)
+
+# Register command handlers
+slack_app.command("/commons")(cmd_handler.handle_commons_command)
+slack_app.command("/onboard")(cmd_handler.handle_onboard_command)
+slack_app.command("/help")(cmd_handler.handle_help_command)
+
+# pass challenge
 auth_response = slack_app.client.auth_test()
 bot_user_id = auth_response["user_id"]
 
-# Customize this list based on the roles and interests in your organization
-roles_and_interests = [
-    "Software Engineer",
-    "Product Manager",
-    "Data Scientist",
-    "Solution Architect",
-    "Operations",
-    "Security Specialist",
-    "Educator",
-]
-
-blocks = [
-    {
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": "Welcome to OpenShift Commons! To get started, tell us about your role or interests:",
-        }
-    },
-    {
-        "type": "actions",
-        "elements": [
-            {
-                "type": "button",
-                "text": {
-                    "type": "plain_text",
-                    "text": role,
-                },
-                "action_id": f"select_{role.lower().replace(' ', '_')}",
-            }
-            for role in roles_and_interests
-        ]
-    },
-]
-
-
-@slack_app.command("/commons")
-def handle_commons_command(ack, say, command, client):
-    user_id = command['user_id']  # Extract the user ID from the command
-    command_channel_id = command['channel_id']  # Extract the channel ID from the command
-    query = command['text']  # Extract the text part of the command which is the query
-    ack()  # Acknowledge the command request immediately
-
-    client.chat_postEphemeral(
-        channel=command_channel_id,
-        user=user_id,
-        text="Got your command, working on it! :hourglass_flowing_sand:"
-    )
-
-    max_attempts = 5
-    query_engine_response = ""
-    # Process and send the transcripts response with retry mechanism
-    try_count = 0
-    while try_count < max_attempts:
-        try:
-            response_transcripts = query_engine_transcripts.query(query)
-            formatted_transcripts_response = convert_markdown_links_to_slack(str(response_transcripts))
-
-            client.chat_postEphemeral(
-                channel=command_channel_id,
-                user=user_id,
-                text=formatted_transcripts_response
-            )
-            query_engine_response = formatted_transcripts_response
-            break  # Exit the loop if successful
-        except Exception as e:
-            print(f"Transcripts error: {str(e)}")
-            try_count += 1
-
-    if try_count == max_attempts:
-        client.chat_postEphemeral(
-            channel=command_channel_id,
-            user=user_id,
-            text="An error occurred while processing the transcripts response, please try again later."
-        )
-
-    client.chat_postEphemeral(
-        channel=command_channel_id,
-        user=user_id,
-        text="Getting you more information :information_source:"
-    )
-
-    # Process and send the agent response with retry mechanism
-    try_count = 0
-    while try_count < max_attempts:
-        try:
-            commons_agent = ReActAgent.from_tools(query_engine_agent_commands_tools, llm=Settings.llm, verbose=True,
-                                                  context=agent_commands_context)
-
-            # use the response from the transcripts query engine to amplify the agent response
-            response_agent = commons_agent.chat(query_engine_response)
-            formatted_agent_response = convert_markdown_links_to_slack(str(response_agent))
-
-            client.chat_postEphemeral(
-                channel=command_channel_id,
-                user=user_id,
-                text=formatted_agent_response
-            )
-            break  # Exit the loop if successful
-        except Exception as e:
-            print(f"Agent error: {str(e)}")
-            try_count += 1
-
-    if try_count == max_attempts:
-        client.chat_postEphemeral(
-            channel=command_channel_id,
-            user=user_id,
-            text="An error occurred while processing the agent response, please try again later."
-        )
-
 
 @slack_app.message()
-def reply(message, say, client):
-    user_id = message['user']  # Extract the user ID from the message
-    reply_channel_id = message['channel']  # Extract the channel ID from the message
-    reply_blocks = message.get('blocks')
-    thread_ts = message.get('thread_ts', None)  # Default to None if thread_ts isn't present
-    # print(blocks)
-    # print("handling message")
-
-    if reply_blocks:
-        for block in reply_blocks:
-            if block.get('type') != 'rich_text':
-                print("TYPE IS:" + block.get('type'))
-                continue
-            for rich_text_section in block.get('elements', []):
-                elements = rich_text_section.get('elements', [])
-                if any(element.get('type') == 'user' and element.get('user_id') == bot_user_id for element in elements):
-                    for element in elements:
-                        if element.get('type') == 'text':
-                            query = element.get('text')
-                            print(f"Somebody asked the bot: {query}")
-
-                            client.reactions_add(
-                                name="hourglass_flowing_sand",
-                                channel=reply_channel_id,
-                                timestamp=message['ts']
-                            )
-
-                            client.chat_postEphemeral(
-                                channel=reply_channel_id,
-                                user=user_id,
-                                text="Got your message, working on it! :hourglass_flowing_sand:",
-                                # Send the response text
-                                thread_ts=thread_ts
-                            )
-
-                            max_attempts = 5
-
-                            # Query and send the transcripts response with retry mechanism
-                            try_count = 0
-                            while try_count < max_attempts:
-                                try:
-                                    response_transcripts = query_engine_transcripts.query(query)
-                                    formatted_transcripts_response = convert_markdown_links_to_slack(
-                                        str(response_transcripts))
-
-                                    client.chat_postMessage(
-                                        channel=reply_channel_id,
-                                        text=formatted_transcripts_response,
-                                        thread_ts=thread_ts or message['ts']
-                                    )
-
-                                    break  # Exit the loop if successful
-                                except Exception as e:
-                                    print(f"Transcripts error: {str(e)}")
-                                    try_count += 1
-
-                            if try_count == max_attempts:
-                                client.chat_postEphemeral(
-                                    channel=reply_channel_id,
-                                    user=user_id,
-                                    text="An error occurred while processing the transcripts response, please try again later."
-                                )
-
-                            # Inform the user that more information is being retrieved
-                            client.chat_postEphemeral(
-                                channel=reply_channel_id,
-                                user=user_id,
-                                text="Getting you more information :information_source:"
-                            )
-
-                            try_count = 0
-                            while try_count < max_attempts:
-                                try:
-                                    commons_agent = ReActAgent.from_tools(query_engine_agent_commands_tools,
-                                                                          llm=Settings.llm,
-                                                                          verbose=True, context=agent_commands_context)
-                                    response_agent = commons_agent.chat(query)
-                                    formatted_response = convert_markdown_links_to_slack(str(response_agent))
-
-                                    print(f"Response was: {formatted_response}")
-
-                                    # Send the final response visible to everyone in the channel
-                                    client.chat_postMessage(
-                                        channel=reply_channel_id,
-                                        text=str(formatted_response),
-                                        thread_ts=thread_ts or message['ts']
-                                    )
-
-                                    break  # Exit the loop if successful
-
-                                except Exception as e:
-                                    print(f"An error occurred: {str(e)}")
-                                    try_count += 1
-
-                            if try_count == max_attempts:
-                                formatted_response = "I'm sorry, something went wrong. Please try again later. In the mean time, checkout the OpenShift commons website: https://commons.openshift.org/ for more information"
-
-                                client.chat_postMessage(
-                                    channel=reply_channel_id,
-                                    text=str(formatted_response),
-                                    thread_ts=thread_ts or message['ts']
-                                )
-
-                            # remove reaction                                     
-                            client.reactions_remove(
-                                name="hourglass_flowing_sand",
-                                channel=reply_channel_id,
-                                timestamp=message['ts']
-                            )
-
-                            client.reactions_add(
-                                name="white_check_mark",
-                                channel=reply_channel_id,
-                                timestamp=message['ts']
-                            )
-    # dt_object = datetime.datetime.fromtimestamp(float(message.get('ts')))
-    # formatted_time = dt_object.strftime('%Y-%m-%d %H:%M:%S')
-    # # otherwise do something else with it
-    # print("Saw a fact: ", message.get('text'))
-    #     # get the message text
-    # text = message.get('text')
-    #     # create a node with metadata
-    # node = TextNode(
-    #     text=text,
-    #     id_=str(uuid.uuid4()),
-    #     metadata={
-    #         "when": formatted_time
-    #     }
-    # )
-    # index.insert_nodes([node])
+def handle_incoming_messages(message, say):
+    message_handler.handle_message(message, say, slack_app.client)
 
 
 # Event, command, and action handlers
@@ -362,92 +147,19 @@ def reply(message, say, client):
 def handle_member_joined_channel(event, client):
     user_id = event['user']['id']
     direct_channel_id = user_id  # Direct message channel ID is the same as the user's ID
-    client.chat_postMessage(channel=direct_channel_id, blocks=blocks, text=f"Welcome <@{user_id}>")
+    client.chat_postMessage(channel=direct_channel_id, blocks=slack.blocks, text=f"Welcome <@{user_id}>")
 
 
-# @slack_app.event("message")
-# def handle_message_events(body, logger):
-#     logger.info(body)
-#     logger.info("We are handling a message")
-
-@slack_app.command("/onboard")
-def handle_onboard_command(ack, body, client):
-    ack()
-    user_id = body["user_id"]
-    onboard_channel_id = body["channel_id"]
-    thread_ts = body.get('thread_ts', None)  # Get thread_ts if present
-
-    # Use chat_postEphemeral to send a message only visible to the user
-    client.chat_postEphemeral(
-        channel=onboard_channel_id,
-        user=user_id,
-        blocks=blocks,
-        thread_ts=thread_ts,
-        text=f"Welcome <@{user_id}>"
-    )
-
-
-@slack_app.command("/help")
-def handle_help_command(ack, body, client):
-    ack()
-
-    user_id = body["user_id"]
-    channel_id = body["channel_id"]
-
-    # Define the help message with an additional section for asking questions
-    help_message = """
-*Here are the commands you can use with this Slack bot:*
-
-* `/onboard`: Get started with the bot and set up your profile.
-* `/help`: Show this help message.
-* `/commons`: Ask a question to the bot about OpenShift Commons.
-
-*Interactions:*
-* Select your role from the buttons provided to get personalized channel recommendations.
-* To ask questions and receive video recommendations, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" The bot will then search through OpenShift Commons videos and transcripts to provide you with relevant video links.
-
-If you have any questions or need further assistance, feel free to ask here!
-    """
-
-    # Use chat_postEphemeral to send the help message only visible to the user who requested it
-    client.chat_postEphemeral(
-        channel=channel_id,
-        user=user_id,
-        text=help_message
-    )
-
-
-@flask_app.route("/slack/events", methods=["POST"])
-def slack_events():
-    data = request.json
-    # Respond to the Slack challenge
-    if data and data.get("type") == "url_verification":
-        return jsonify({
-            "challenge": data.get("challenge")
-        })
-
-    return handler.handle(request)
-
-
-@flask_app.route("/slack/commands", methods=["POST"])
-def slack_commands():
-    return handler.handle(request)
-
-
-@flask_app.route("/slack/interactive", methods=["POST"])
-def slack_interactive():
-    print("Interactive")
-    payload = json.loads(request.form["payload"])
-
-    # Extract action_id from the payload
+def _parse_payload(payload):
+    """Extracts and returns relevant information from the payload."""
     action_id = payload["actions"][0]["action_id"]
-    user_id = payload["user"]["id"]
-    response_url = payload["response_url"]
-    channel_id = payload['channel']['id']  # Ensure this is correctly extracted
-
-    # Parse the role from the action_id
     role = action_id.split('select_')[1].replace('_', ' ').title()
+    user_id = payload["user"]["id"]
+    channel_id = payload['channel']['id']
+    return role, user_id, channel_id
 
+
+def _get_suggested_channels(role):
     channel_suggestions = {
         "software engineer": [
             {"name": "bigdata_sig", "id": "C338UGHG8"},
@@ -484,50 +196,59 @@ def slack_interactive():
         ],
     }
 
-    channel_names_id = channel_suggestions.get(role.lower(), [])
-    suggested_channels = [{"name": name_id['name'], "id": name_id['id']} for name_id in channel_names_id]
-    suggested_channels = [channel for channel in suggested_channels if channel['id'] is not None]
-    suggested_channels_text = "\n".join([f"- <#{channel['id']}|{channel['name']}>" for channel in suggested_channels])
-    kubecon_paris = {"name": "kubecon_paris", "id": "C06HFFNHVPA"}
+    """Returns a formatted string of suggested channels based on the role."""
+    channel_ids_names = channel_suggestions.get(role.lower(), [])
+    suggested_channels = [f"- <#{ch['id']}|{ch['name']}>" for ch in channel_ids_names if ch['id']]
+    return "\n".join(suggested_channels)
 
+
+def _construct_response_text(user_id, role, suggested_channels_text):
     help_message = """
-*Here are more things you can do:*
+    *Here are more things you can do:*
 
-- `/help`: Show this help message.
-- `/commons`: Ask a question to the bot about OpenShift Commons that is only visible to you.
--  Ask questions and receive recommendations, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" 
-The bot will then search through it's knowledge to provide you with relevant information.
+    - `/help`: Show this help message.
+    - `/commons`: Ask a question to the bot about OpenShift Commons that is only visible to you.
+    -  Ask questions and receive recommendations, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" 
+    The bot will then search through it's knowledge to provide you with relevant information.
 
-If you have any questions or need further assistance, feel free to ask here! Also make sure to check https://commons.openshift.org/ for more information.
-    """
+    If you have any questions or need further assistance, feel free to ask here! Also make sure to check https://commons.openshift.org/ for more information.
+        """
+    kubecon_paris = {"name": "kubecon_paris", "id": "C06HFFNHVPA"}
+    return (f"<@{user_id}> based on your interest in {role}, we suggest you join the following channels:\n"
+            f"{suggested_channels_text}\n"
+            f"- <#{kubecon_paris['id']}|{kubecon_paris['name']}> (also check out KubeCon Paris Channel)\n\n"
+            f"{help_message}")
 
-    # Prepare the response message
-    response_text = f"<@{user_id}> based on your interest in {role}, we suggest you join the following channels:\n{suggested_channels_text}"
-    response_text += f"\n- <#{kubecon_paris['id']}|{kubecon_paris['name']}> (also check out KubeCon Paris Channel)"
-    # append response_text with help_message to use the bot
-    response_text += f"\n\n{help_message}"
 
-    # create slack_client
-    slack_client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
-    # Use chat_postEphemeral to send a reply only visible to the user
-    slack_client.chat_postEphemeral(
-        channel=channel_id,
-        user=user_id,
-        text=response_text  # Pass the response_text string here
-    )
+@flask_app.route("/slack/interactive", methods=["POST"])
+def slack_interactive():
+    print("Interactive")
+    payload = json.loads(request.form["payload"])
+    role, user_id, channel_id = _parse_payload(payload)
+    suggested_channels_text = _get_suggested_channels(role)
+    response_text = _construct_response_text(user_id, role, suggested_channels_text)
 
-    # send_response_to_slack(response_url=response_url, message=message)
+    # Assuming slack_ops is an instance of a class that handles Slack operations
+    slack_ops.post_ephemeral_message(channel_id, user_id, response_text)
+
     return jsonify({})
 
 
-def send_response_to_slack(response_url, message):
-    webhook = WebhookClient(response_url)
-    response = webhook.send(text=message["text"])
+@flask_app.route("/slack/commands", methods=["POST"])
+def slack_commands():
+    return handler.handle(request)
 
-    if response.status_code == 200:
-        print("Message sent successfully")
-    else:
-        print(f"Failed to send message, error: {response.status_code}, {response.body}")
+
+@flask_app.route("/slack/events", methods=["POST"])
+def slack_events():
+    data = request.json
+    # Respond to the Slack challenge
+    if data and data.get("type") == "url_verification":
+        return jsonify({
+            "challenge": data.get("challenge")
+        })
+
+    return handler.handle(request)
 
 
 if __name__ == "__main__":
