@@ -99,10 +99,10 @@ class CommandHandler:
         for attempt in range(max_attempts):
             try:
                 response = process_func()
-                formatted_transcripts_response = convert_markdown_links_to_slack(str(response))
+                formatted_transcripts_response = utils.convert_to_slack_formatting(str(response))
 
-                self.slack_ops.post_ephemeral_message(channel_id, user_id, formatted_transcripts_response,
-                                                      thread_ts)
+                self.slack_ops.post_ephemeral_message(channel_id, user_id, formatted_transcripts_response, thread_ts)
+
                 return True
             except Exception as e:
                 print(f"Error: {str(e)}")
@@ -183,7 +183,7 @@ class CommandHandler:
     # Other command handlers as methods of this class
 
 
-from utils import convert_markdown_links_to_slack
+import utils
 
 
 class MessageHandler:
@@ -201,7 +201,7 @@ class MessageHandler:
         for attempt in range(max_attempts):
             try:
                 response = process_func()
-                formatted_response = convert_markdown_links_to_slack(str(response))
+                formatted_response = utils.convert_to_slack_formatting(str(response))
                 self.slack_ops.post_message(channel_id, formatted_response, thread_ts=thread_ts)
                 return True
             except Exception as e:
