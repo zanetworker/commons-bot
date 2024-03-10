@@ -138,11 +138,11 @@ class FeedSpec(BaseToolSpec):
 class BingSearchToolSpec(BaseToolSpec):
     """Bing Search tool spec."""
 
-    spec_functions = ["bing_news_search", "bing_video_search"]
+    spec_functions = ["bing_search", "bing_news_search", "bing_video_search"]
     # spec_functions = ["bing_news_search", "bing_image_search", "bing_video_search"]
 
     def __init__(
-            self, api_key: str, lang: Optional[str] = "en-US", results: Optional[int] = 3
+            self, api_key: str, lang: Optional[str] = "en-US", results: Optional[int] = 5
     ) -> None:
         """Initialize with parameters."""
         self.api_key = api_key
@@ -178,6 +178,17 @@ class BingSearchToolSpec(BaseToolSpec):
         # Extracting and returning the desired information from the results
         return [[result[key] for key in keys] for result in response_json.get("value", [])]
 
+    # write a function to do bing search
+    def bing_search(self, query: str):
+        """
+        Make a query to bing news search. Useful for finding news on a query.
+
+        Args:
+            query (str): The query to be passed to bing.
+
+        """
+        return self._bing_request("search", query, ["name", "description", "url"])
+
     def bing_news_search(self, query: str):
         """
         Make a query to bing news search. Useful for finding news on a query.
@@ -187,6 +198,7 @@ class BingSearchToolSpec(BaseToolSpec):
 
         """
         return self._bing_request("news/search", query, ["name", "description", "url"])
+
 
     def bing_image_search(self, query: str):
         """
