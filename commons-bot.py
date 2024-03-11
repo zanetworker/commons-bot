@@ -34,7 +34,7 @@ import threading
 import os
 
 # Settings.llm = OpenAI(model="gpt-4", temperature=0.1, stop_symbols=["\n"])
-Settings.llm = OpenAI(model="gpt-4-turbo-preview", temperature=0.1, stop_symbols=["\n"])
+Settings.llm = OpenAI(model="gpt-4", temperature=0.1, stop_symbols=["\n"])
 # change to gpt-4-1106-preview
 # Settings.llm = OpenAI(model="gpt-4-1106-preview", temperature=0.1, stop_symbols=["\n"])
 # Settings.llm = OpenAI(model="gpt-3.5-turbo", temperature=0.1, stop_symbols=["\n"])
@@ -129,7 +129,7 @@ cmd_handler = slack.CommandHandler(slack_ops, query_engine_transcripts, query_en
                                    agent_commands_context)
 
 # Register command handlers
-slack_app.command("/commons")(cmd_handler.handle_commons_command)
+slack_app.command("/commons")(cmd_handler.handle_commons_command_agent_only)
 slack_app.command("/onboard")(cmd_handler.handle_onboard_command)
 slack_app.command("/help")(cmd_handler.handle_help_command)
 
@@ -140,7 +140,7 @@ bot_user_id = auth_response["user_id"]
 
 @slack_app.message()
 def handle_incoming_messages(message, say):
-    message_handler.handle_message(message, say, slack_app.client)
+    message_handler.handle_message(message, say, slack_app.client, bot_user_id)
 
 
 # Event, command, and action handlers

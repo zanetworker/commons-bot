@@ -170,7 +170,13 @@ class QueryEngineToolsManager:
         self._query_engine = query_engine
         self._youtube_tool_spec = YoutubeSpec()
         self._bing_search_tool_spec = BingSearchToolSpec(api_key=os.environ["BING_SEARCH_API_KEY"])
-
+        self.youtube_transcripts_tool = QueryEngineTool(
+            query_engine=self._query_engine,
+            metadata=ToolMetadata(
+                name="youtube_transcripts",
+                description="Transcripts for OpenShift commons videos. Each transcript is for a video that talks about a certain topic.",
+            ),
+        )
     @property
     def slack_tool(self):
         return self._slack_tool_spec.to_tool_list()
@@ -189,17 +195,9 @@ class QueryEngineToolsManager:
 
     @property
     def query_engine_agent_tools(self):
-        # Assuming metadata and other necessary configurations for the query engine tools are set correctly
-        youtube_transcripts_tool = QueryEngineTool(
-            query_engine=self._query_engine,
-            metadata=ToolMetadata(
-                name="youtube_transcripts",
-                description="Transcripts for OpenShift commons videos. Each transcript is for a video that talks about a certain topic.",
-            ),
-        )
-        return [*self.slack_tool, *self.feed_tool, *self.yotube_link_checker_tool, youtube_transcripts_tool]
+        return [*self.slack_tool, *self.feed_tool, *self.yotube_link_checker_tool, self.youtube_transcripts_tool]
 
     @property
     def query_engine_command_tools(self):
         # Assuming metadata and other necessary configurations for the query engine tools are set correctly
-        return [*self.slack_tool, *self.feed_tool, *self.bing_search]
+        return [*self.slack_tool, *self.feed_tool, *self.bing_search, self.youtube_transcripts_tool]

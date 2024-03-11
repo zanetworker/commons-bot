@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: commons-ai
+  namespace: commons
+  labels:
+    app: commons-ai
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: commons-ai
+  template:
+    metadata:
+      labels:
+        app: commons-ai
+    spec:
+      containers:
+      - name: commons-ai
+        image: docker.io/zanetworker/commons-bot:latest
+        ports:
+        - containerPort: 10000
+        envFrom:
+        - secretRef:
+            name: api-keys
