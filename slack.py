@@ -114,6 +114,24 @@ class CommandHandler:
                                                   thread_ts)
         return False
 
+
+    def handle_commons_command_agent_only(self, ack, command):
+        ack()
+        user_id = command['user_id']
+        channel_id = command['channel_id']
+        query = command['text']
+
+        self.slack_ops.post_ephemeral_message(channel_id, user_id,
+                                              "Got your command, working on it! :hourglass_flowing_sand:")
+
+        self.process_command_query_with_retry(
+            lambda: ReActAgent.from_tools(
+                self.query_engine_agent_commands_tools,
+                llm=Settings.llm,
+                verbose=True,
+                context=self.agent_commands_context).chat(query),
+            channel_id, user_id
+        )
     def handle_commons_command(self, ack, command):
         ack()
         user_id = command['user_id']
@@ -217,6 +235,31 @@ class MessageHandler:
 
         return False
 
+    def process_message_query_agent_only(self, query, reply_channel_id, reply_user_id, thread_ts):
+        self.slack_ops.add_reaction(reply_channel_id, thread_ts, "hourglass_flowing_sand")
+
+        self.slack_ops.post_ephemeral_message(
+            reply_channel_id,
+            reply_user_id,
+            text="Got your command, working on it! :hourglass_flowing_sand:"
+        )
+
+        self.process_message_query_with_retry(
+            lambda: ReActAgent.from_tools(
+                self.query_engine_agent_commands_tools,
+                llm=Settings.llm,
+                verbose=True,
+                context=self.agent_commands_context).chat(query),
+            channel_id=reply_channel_id,
+            user_id=reply_user_id,
+            thread_ts=thread_ts
+        )
+
+        # remove the hourglass emoji and add a checkmark
+        self.slack_ops.remove_reaction(reply_channel_id, thread_ts, "hourglass_flowing_sand")
+        self.slack_ops.add_reaction(reply_channel_id, thread_ts, "white_check_mark")
+
+
     def process_message_query(self, query, reply_channel_id, reply_user_id, thread_ts):
         self.slack_ops.add_reaction(reply_channel_id, thread_ts, "hourglass_flowing_sand")
 
@@ -252,18 +295,25 @@ class MessageHandler:
         self.slack_ops.remove_reaction(reply_channel_id, thread_ts, "hourglass_flowing_sand")
         self.slack_ops.add_reaction(reply_channel_id, thread_ts, "white_check_mark")
 
-    def reply(self, message):
+    def reply(self, message, bot_user_id):
         user_id = message['user']
         channel_id = message['channel']
         thread_ts = message.get('thread_ts', message['ts'])
+        reply_blocks = message.get('blocks')
 
-        for block in message.get('blocks', []):
-            if block.get('type') == 'rich_text':
-                for section in block.get('elements', []):
-                    for element in section.get('elements', []):
-                        if element.get('type') == 'text':
-                            query = element.get('text')
-                            self.process_message_query(query, channel_id, user_id, thread_ts)
+        if reply_blocks:
+            for block in reply_blocks:
+                if block.get('type') != 'rich_text':
+                    print("TYPE IS:" + block.get('type'))
+                    continue
+                for rich_text_section in block.get('elements', []):
+                    elements = rich_text_section.get('elements', [])
+                    if any(element.get('type') == 'user' and element.get('user_id') == bot_user_id for element in
+                           elements):
+                        for element in elements:
+                            if element.get('type') == 'text':
+                                query = element.get('text')
+                                self.process_message_query_agent_only(query, channel_id, user_id, thread_ts)
 
-    def handle_message(self, message, say, client):
-        self.reply(message)
+    def handle_message(self, message, say, client, bot_user_id):
+        self.reply(message, bot_user_id)
