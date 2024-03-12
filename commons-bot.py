@@ -157,7 +157,10 @@ def _parse_payload(payload):
     role = action_id.split('select_')[1].replace('_', ' ').title()
     user_id = payload["user"]["id"]
     channel_id = payload['channel']['id']
-    return role, user_id, channel_id
+    # Check for thread_ts, if not available, use ts or set to None
+    thread_ts = payload.get('message', {}).get('thread_ts', payload.get('container', {}).get('thread_ts', None))
+
+    return role, user_id, channel_id, thread_ts
 
 
 def _get_suggested_channels(role):
@@ -168,32 +171,43 @@ def _get_suggested_channels(role):
             {"name": "dotnet_sig", "id": "C343FF8SH"},
             {"name": "devops_sig", "id": "C34333SCC"},
             {"name": "openstack_sig", "id": "C34L30NK0"},
+            {"name": "general", "id": "C0FNVPMNF"},
         ],
         "product manager": [
             {"name": "event", "id": "C0FNZ57NJ"},
+            {"name": "data_and_ai_sig", "id": "C8L8S4XFF"},
+            {"name": "bigdata_sig", "id": "C338UGHG8"},
+            {"name": "imagebuilder_sig", "id": "C338V74DN"},
+            {"name": "dotnet_sig", "id": "C343FF8SH"},
+            {"name": "devops_sig", "id": "C34333SCC"},
+            {"name": "general", "id": "C0FNVPMNF"},
         ],
         "data scientist": [
             {"name": "bigdata_sig", "id": "C338UGHG8"},
             {"name": "data_and_ai_sig", "id": "C8L8S4XFF"},
-            {"name": "datascience-gathering-2021", "id": "C01L2ET3H50"},
+            {"name": "general", "id": "C0FNVPMNF"},
         ],
         "solution architect": [
             {"name": "cloud-paks", "id": "C02E27BJD98"},
             {"name": "openstack_sig", "id": "C34L30NK0"},
             {"name": "operator-framework", "id": "CBA2X443E"},
+            {"name": "general", "id": "C0FNVPMNF"},
         ],
         "operations": [
             {"name": "operations_sig", "id": "C34333SCC"},
             {"name": "operations-_sig", "id": "C343D9BBP"},
             {"name": "aws", "id": "CCL8BMY7J"},
+            {"name": "general", "id": "C0FNVPMNF"},
         ],
         "security specialist": [
             {"name": "security_sig", "id": "C340W5L2E"},
             {"name": "gov_sig", "id": "C3409GB1Q"},
+            {"name": "general", "id": "C0FNVPMNF"},
         ],
         "educator": [
             {"name": "edu_sig", "id": "C34LFK1K9"},
             {"name": "meetup-organizers", "id": "C015THC4KMW"},
+            {"name": "general", "id": "C0FNVPMNF"},
         ],
     }
 
@@ -209,13 +223,11 @@ def _construct_response_text(user_id, role, suggested_channels_text):
 
     - `/help`: Show this help message.
     - `/commons`: Ask a question to the bot about OpenShift Commons that is only visible to you.
-    -  Ask questions and receive recommendations, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes?" 
-    The bot will then search through it's knowledge to provide you with relevant information.
+    -  Ask questions and receive recommendations, mention the bot with "@OpenShift Commons Team" followed by your question. For example, "@OpenShift Commons Team what are the latest insights on Kubernetes? The bot will then search through it's knowledge to provide you with relevant information.
 
-    If you have any questions or need further assistance, feel free to ask here! Also make sure to check https://commons.openshift.org/ for more information.
         """
     kubecon_paris = {"name": "kubecon_paris", "id": "C06HFFNHVPA"}
-    return (f"<@{user_id}> based on your interest in {role}, we suggest you join the following channels:\n"
+    return (f"<@{user_id}> based on your interest in {role}, we suggest you join the following channels:\n\n"
             f"{suggested_channels_text}\n"
             f"- <#{kubecon_paris['id']}|{kubecon_paris['name']}> (also check out KubeCon Paris Channel)\n\n"
             f"{help_message}")
@@ -224,13 +236,41 @@ def _construct_response_text(user_id, role, suggested_channels_text):
 @flask_app.route("/slack/interactive", methods=["POST"])
 def slack_interactive():
     print("Interactive")
+
+    import utils
     payload = json.loads(request.form["payload"])
-    role, user_id, channel_id = _parse_payload(payload)
+    role, user_id, channel_id, thread_ts = _parse_payload(payload)
     suggested_channels_text = _get_suggested_channels(role)
     response_text = _construct_response_text(user_id, role, suggested_channels_text)
 
     # Assuming slack_ops is an instance of a class that handles Slack operations
     slack_ops.post_ephemeral_message(channel_id, user_id, response_text)
+
+    slack_ops.post_ephemeral_message(channel_id, user_id,
+                                     "Customizing information for you. Please wait a moment... :mag_right:")
+
+    # construct a query to a llm based on role provide useful references
+    query = f"As a {role}, what are the latest insights, recommendations, topics in OpenShift? Tell me why it fits my role."
+
+    try:
+        response = ReActAgent.from_tools(
+            query_engine_agent_commands_tools,
+            llm=Settings.llm,
+            verbose=True,
+            context=agent_commands_context).chat(query)
+        formatted_transcripts_response = utils.convert_to_slack_formatting(str(response))
+
+        slack_ops.post_ephemeral_message(channel_id, user_id, formatted_transcripts_response, thread_ts)
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        slack_ops.post_ephemeral_message(channel_id, user_id,
+                                         "You are good to go! If you have any questions or need further assistance, feel free to ask here: \n {suggested_channels_text}\n Also make sure to check https://commons.openshift.org/ for more information. Have fun :tada:!",
+                                         thread_ts)
+
+    slack_ops.post_ephemeral_message(channel_id, user_id,
+                                     f"You are good to go! If you have any questions or need further assistance, feel free to ask here: \n {suggested_channels_text}\n Also make sure to check https://commons.openshift.org/ for more information. Have fun :tada:!",
+                                     thread_ts)
 
     return jsonify({})
 
