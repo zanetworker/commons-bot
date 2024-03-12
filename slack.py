@@ -171,7 +171,7 @@ class CommandHandler:
             channel=onboard_channel_id,
             user=user_id,
             text=f"Welcome <@{user_id}>",
-            blocks=blocks,
+            message_blocks=blocks,
             thread_ts=thread_ts
         )
 
