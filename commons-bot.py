@@ -34,10 +34,9 @@ import threading
 import os
 
 # Settings.llm = OpenAI(model="gpt-4", temperature=0.1, stop_symbols=["\n"])
-Settings.llm = OpenAI(model="gpt-4", temperature=0.1, stop_symbols=["\n"])
-# change to gpt-4-1106-preview
 # Settings.llm = OpenAI(model="gpt-4-1106-preview", temperature=0.1, stop_symbols=["\n"])
 # Settings.llm = OpenAI(model="gpt-3.5-turbo", temperature=0.1, stop_symbols=["\n"])
+Settings.llm = OpenAI(model="gpt-4o", temperature=0.1, stop_symbols=["\n"])
 
 # Settings.llm = Ollama(model="llama2", request_timeout=240.0, base_url="http://192.168.178.254:11434")
 

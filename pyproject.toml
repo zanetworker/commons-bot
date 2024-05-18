@@ -7,7 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.12"
-llama-index = "^0.10.15"
+llama-index = "^0.10.37"
 llama-index-llms-openai = "^0.1.6"
 llama-index-readers-youtube-transcript = "^0.1.4"
 python-dotenv = "^1.0.0"
